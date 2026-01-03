@@ -12,6 +12,19 @@ body {
   color-scheme: dark;
 }
 
+/* Global sizing: many devices look "perfect" around 80–90% browser zoom.
+   We achieve a similar effect by slightly lowering the root font size (Tailwind uses rem). */
+html {
+  font-size: 14px;
+}
+@media (min-width: 1024px) {
+  html { font-size: 15px; }
+}
+@media (min-width: 1536px) {
+  html { font-size: 16px; }
+}
+
+
 html, body {
   min-height: 100%;
 }
