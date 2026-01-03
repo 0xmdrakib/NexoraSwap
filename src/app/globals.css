@@ -12,16 +12,17 @@ body {
   color-scheme: dark;
 }
 
-/* Global sizing: many devices look "perfect" around 80–90% browser zoom.
-   We achieve a similar effect by slightly lowering the root font size (Tailwind uses rem). */
+/* Global sizing: many devices look "perfect" around ~80–90% browser zoom.
+   We mimic that by lowering the root font size (Tailwind uses rem).
+   This is an additional -10% vs the previous values (14→12.6, 15→13.5, 16→14.4). */
 html {
-  font-size: 14px;
+  font-size: 12.6px;
 }
 @media (min-width: 1024px) {
-  html { font-size: 15px; }
+  html { font-size: 13.5px; }
 }
 @media (min-width: 1536px) {
-  html { font-size: 16px; }
+  html { font-size: 14.4px; }
 }
 
 
