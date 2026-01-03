@@ -1,47 +1,25 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+import type { Metadata, Viewport } from 'next';
+import './globals.css';
+import Providers from './providers';
 
-/* Prevent tiny horizontal overflows on small screens (common with long token symbols/addresses). */
-html,
-body {
-  overflow-x: hidden;
-}
-
-:root {
-  color-scheme: dark;
-}
-
-/* Global sizing: many devices look "perfect" around ~80–90% browser zoom.
-   We mimic that by lowering the root font size (Tailwind uses rem).
-   This is an additional -10% vs the previous values (14→12.6, 15→13.5, 16→14.4). */
-html {
-  font-size: 12.6px;
-}
-@media (min-width: 1024px) {
-  html { font-size: 13.5px; }
-}
-@media (min-width: 1536px) {
-  html { font-size: 14.4px; }
-}
+export const metadata: Metadata = {
+  title: 'Nexora Swap',
+  description: 'Nexora Swap — a multi-router swap UI starter (LiFi + optional adapters) built with RainbowKit + wagmi.',
+};
 
 
-html, body {
-  min-height: 100%;
-}
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+};
 
-/* Put the background on the root element so it stays consistent on long pages. */
-html {
-  background: radial-gradient(1200px 600px at 10% 10%, rgba(120, 60, 255, 0.15), transparent 60%),
-              radial-gradient(900px 500px at 90% 20%, rgba(40, 220, 180, 0.12), transparent 55%),
-              radial-gradient(1100px 700px at 50% 120%, rgba(255, 180, 40, 0.08), transparent 60%),
-              #0b0e14;
-  background-repeat: no-repeat;
-  background-attachment: fixed;
-}
-
-body {
-  min-height: 100%;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.92);
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <body>
+        <Providers>{children}</Providers>
+      </body>
+    </html>
+  );
 }
