@@ -442,15 +442,26 @@ export default function SwapCard() {
   }, [totalValueStr, nativePriceUsdForFees]);
 
   const bridgeFeeDominates = useMemo(() => {
-    if (!quote || !isCrossChain) return false;
-    if (!bridgeFeeWei || bridgeFeeWei <= 0n) return false;
+    // Only relevant for cross-chain routes where there is a non-zero native tx value (bridge/messaging gas).
+    // `QuoteResponse` is our internal shape; it doesn't expose an `isCrossChain` flag.
+    // Use the derived boolean from the selected chains.
+    if (!quote || !isCrossChain || bridgeFeeWei <= 0n) return false;
+
+    // Prefer USD comparison (works for ERC20 inputs too).
+    if (bridgeFeeUsd > 0 && fromUsd > 0) {
+      return bridgeFeeUsd > fromUsd;
+    }
+
+    // Fallback: only safe to compare raw units when the "from" token is native.
+    if (!fromIsNative) return false;
+
     try {
       const fromWei = BigInt(fromAmountRaw || '0');
       return bridgeFeeWei > fromWei;
     } catch {
       return false;
     }
-  }, [quote, isCrossChain, fromAmountRaw, bridgeFeeWei]);
+  }, [quote, isCrossChain, bridgeFeeWei, bridgeFeeUsd, fromUsd, fromIsNative, fromAmountRaw]);
 
   const priceDeviationPct = useMemo(() => {
     if (!fromUsd || !toUsd) return 0;
