@@ -169,6 +169,7 @@ export default function SwapCard() {
 
   // Live balance for the "from" token (used to show instant "insufficient balance" UX).
   const fromIsNative = fromToken?.address === ZERO;
+  const toIsNative = toToken?.address === ZERO;
   const { data: fromBalance } = useBalance({
     address: address as Address | undefined,
     chainId,
@@ -354,6 +355,49 @@ export default function SwapCard() {
     }
   }, [chainId]);
 
+  // For bridge/messaging fees we need the USD price of the source-chain native token.
+  // Previously we only computed USD when the "from" token was native, which caused
+  // fee USD to disappear when swapping from an ERC20 (e.g. USDC -> ... cross-chain).
+  const [nativePriceUsdForFees, setNativePriceUsdForFees] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const resolve = async () => {
+      // Only relevant for cross-chain (bridge) routes.
+      if (!isCrossChain) {
+        setNativePriceUsdForFees(0);
+        return;
+      }
+
+      // Fast-path: if either selected token is native we usually already have its price.
+      const direct =
+        (fromIsNative && fromPrice > 0 ? fromPrice : 0) ||
+        (toIsNative && toPrice > 0 ? toPrice : 0);
+
+      if (direct > 0) {
+        setNativePriceUsdForFees(direct);
+        return;
+      }
+
+      // Fallback: ask our own /api/tokens for the native token's priceUSD.
+      // The endpoint supports nativeOnly=1 to keep the payload small.
+      try {
+        const res = await fetch(`/api/tokens?chainId=${chainId}&nativeOnly=1`);
+        const json = await res.json();
+        const p = Number(json?.token?.priceUSD || json?.tokens?.[0]?.priceUSD || 0);
+        if (!cancelled) setNativePriceUsdForFees(Number.isFinite(p) && p > 0 ? p : 0);
+      } catch {
+        if (!cancelled) setNativePriceUsdForFees(0);
+      }
+    };
+
+    resolve();
+    return () => {
+      cancelled = true;
+    };
+  }, [chainId, isCrossChain, fromIsNative, toIsNative, fromPrice, toPrice]);
+
   const bridgeFeeWei = useMemo(() => {
     if (!quote || !isCrossChain) return 0n;
     if (txValueWei === 0n) return 0n;
@@ -380,11 +424,10 @@ export default function SwapCard() {
 
   const bridgeFeeUsd = useMemo(() => {
     if (!bridgeFeeStr) return 0;
-    // Reliable only when the from token IS the native token and we have its USD price.
-    if (!fromIsNative || fromPrice <= 0) return 0;
+    if (nativePriceUsdForFees <= 0) return 0;
     const fee = safeParseFloat(bridgeFeeStr);
-    return fee > 0 ? fee * fromPrice : 0;
-  }, [bridgeFeeStr, fromIsNative, fromPrice]);
+    return fee > 0 ? fee * nativePriceUsdForFees : 0;
+  }, [bridgeFeeStr, nativePriceUsdForFees]);
 
   const totalValueStr = useMemo(() => {
     if (!quote || !isCrossChain || txValueWei <= 0n) return '';
@@ -393,10 +436,10 @@ export default function SwapCard() {
 
   const totalValueUsd = useMemo(() => {
     if (!totalValueStr) return 0;
-    if (!fromIsNative || fromPrice <= 0) return 0;
+    if (nativePriceUsdForFees <= 0) return 0;
     const v = safeParseFloat(totalValueStr);
-    return v > 0 ? v * fromPrice : 0;
-  }, [totalValueStr, fromIsNative, fromPrice]);
+    return v > 0 ? v * nativePriceUsdForFees : 0;
+  }, [totalValueStr, nativePriceUsdForFees]);
 
   const bridgeFeeDominates = useMemo(() => {
     if (!quote || !isCrossChain) return false;
