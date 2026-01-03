@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html, body {
+  min-height: 100%;
+}
+
+/* Put the background on the root element so it stays consistent on long pages. */
+html {
+  background: radial-gradient(1200px 600px at 10% 10%, rgba(120, 60, 255, 0.15), transparent 60%),
+              radial-gradient(900px 500px at 90% 20%, rgba(40, 220, 180, 0.12), transparent 55%),
+              radial-gradient(1100px 700px at 50% 120%, rgba(255, 180, 40, 0.08), transparent 60%),
+              #0b0e14;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+body {
+  min-height: 100%;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.92);
+}
