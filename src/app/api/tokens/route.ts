@@ -24,6 +24,7 @@ function normalizeToken(t: any, chainId: number): Token | null {
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const chainId = Number(url.searchParams.get('chainId') || '0');
+  const nativeOnly = url.searchParams.get('nativeOnly') === '1';
   if (!chainId) return new NextResponse('Missing chainId', { status: 400 });
 
   const headers: Record<string, string> = { accept: 'application/json' };
@@ -53,6 +54,11 @@ export async function GET(req: Request) {
         name: json?.nativeToken?.name || 'Native Token',
         decimals: Number(json?.nativeToken?.decimals || 18),
       });
+    }
+
+    if (nativeOnly) {
+      const native = tokens.find((t) => t.address === '0x0000000000000000000000000000000000000000') || null;
+      return NextResponse.json({ token: native });
     }
 
     return NextResponse.json({ tokens });
