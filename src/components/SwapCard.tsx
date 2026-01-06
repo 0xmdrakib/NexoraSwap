@@ -384,8 +384,10 @@ export default function SwapCard() {
         const res = await fetch(`/api/native-price?chainId=${chainId}`, {
           signal: controller.signal,
         });
-        const json = await res.json();
-        const p = Number(json?.usdPrice || 0);
+        const json = await res.json().catch(() => null);
+        // API returns `{ usd: number }`.
+        // Keep a tiny backward-compat fallback (`usdPrice`) so old builds won't break.
+        const p = Number((json as any)?.usd ?? (json as any)?.usdPrice ?? 0);
         if (!controller.signal.aborted) {
           setNativePriceUsdForFees(Number.isFinite(p) && p > 0 ? p : 0);
         }
@@ -418,9 +420,10 @@ export default function SwapCard() {
   }, [quote, isCrossChain, txValueWei, fromIsNative, fromAmountRaw]);
 
   const bridgeFeeStr = useMemo(() => {
-    if (bridgeFeeWei <= 0n) return '';
+    // For cross-chain routes we show this row even when the fee is 0.
+    if (!isCrossChain) return '';
     return formatTokenAmount(bridgeFeeWei.toString(), 18, 8);
-  }, [bridgeFeeWei]);
+  }, [isCrossChain, bridgeFeeWei]);
 
   const bridgeFeeUsd = useMemo(() => {
     if (!bridgeFeeStr) return 0;
@@ -430,7 +433,8 @@ export default function SwapCard() {
   }, [bridgeFeeStr, nativePriceUsdForFees]);
 
   const totalValueStr = useMemo(() => {
-    if (!quote || !isCrossChain || txValueWei <= 0n) return '';
+    // For cross-chain routes we show this row even when tx.value is 0.
+    if (!quote || !isCrossChain) return '';
     return formatTokenAmount(txValueWei.toString(), 18, 8);
   }, [quote, isCrossChain, txValueWei]);
 
@@ -888,14 +892,14 @@ export default function SwapCard() {
                       <span className="text-white/55">Bridge DEX fee (est.)</span>
                       <span className="font-medium tabular-nums text-white/80">
                         {bridgeFeeStr
-                          ? `${bridgeFeeStr} ${nativeSymbol}${bridgeFeeUsd ? ` (${formatUSD(bridgeFeeUsd)})` : ''}`
+                          ? `${bridgeFeeStr} ${nativeSymbol} (${formatUSD(bridgeFeeUsd)})`
                           : `—`}
                       </span>
                     </div>
                     <div className="mt-1 flex items-center gap-2">
                       <span className="text-white/55">Wallet will send (tx value)</span>
                       <span className="font-medium tabular-nums text-white/80">
-                        {`${totalValueStr} ${nativeSymbol}${totalValueUsd ? ` (${formatUSD(totalValueUsd)})` : ''}`}
+                        {`${totalValueStr} ${nativeSymbol} (${formatUSD(totalValueUsd)})`}
                       </span>
                     </div>
                     {bridgeFeeDominates ? (
