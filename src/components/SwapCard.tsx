@@ -361,42 +361,42 @@ export default function SwapCard() {
   const [nativePriceUsdForFees, setNativePriceUsdForFees] = useState(0);
 
   useEffect(() => {
-    let cancelled = false;
+    // Always clear first to avoid showing a stale USD value while we resolve.
+    setNativePriceUsdForFees(0);
+
+    // Only relevant for cross-chain (bridge) routes.
+    if (!isCrossChain) return;
+
+    const controller = new AbortController();
 
     const resolve = async () => {
-      // Only relevant for cross-chain (bridge) routes.
-      if (!isCrossChain) {
-        setNativePriceUsdForFees(0);
-        return;
-      }
-
-      // Fast-path: if either selected token is native we usually already have its price.
-      const direct =
-        (fromIsNative && fromPrice > 0 ? fromPrice : 0) ||
-        (toIsNative && toPrice > 0 ? toPrice : 0);
-
+      // Fast-path: if the *source* token is native, we already have its USD price.
+      // Note: In cross-chain routes, fees are always paid in the source-chain native token,
+      // so we intentionally do NOT use destination-native prices.
+      const direct = fromIsNative && fromPrice > 0 ? fromPrice : 0;
       if (direct > 0) {
         setNativePriceUsdForFees(direct);
         return;
       }
 
-      // Fallback: ask our own /api/tokens for the native token's priceUSD.
-      // The endpoint supports nativeOnly=1 to keep the payload small.
+      // Reliable fallback: resolve source-chain native USD price.
       try {
-        const res = await fetch(`/api/tokens?chainId=${chainId}&nativeOnly=1`);
+        const res = await fetch(`/api/native-price?chainId=${chainId}`, {
+          signal: controller.signal,
+        });
         const json = await res.json();
-        const p = Number(json?.token?.priceUSD || json?.tokens?.[0]?.priceUSD || 0);
-        if (!cancelled) setNativePriceUsdForFees(Number.isFinite(p) && p > 0 ? p : 0);
+        const p = Number(json?.usdPrice || 0);
+        if (!controller.signal.aborted) {
+          setNativePriceUsdForFees(Number.isFinite(p) && p > 0 ? p : 0);
+        }
       } catch {
-        if (!cancelled) setNativePriceUsdForFees(0);
+        // ignore
       }
     };
 
     resolve();
-    return () => {
-      cancelled = true;
-    };
-  }, [chainId, isCrossChain, fromIsNative, toIsNative, fromPrice, toPrice]);
+    return () => controller.abort();
+  }, [chainId, isCrossChain, fromIsNative, fromPrice]);
 
   const bridgeFeeWei = useMemo(() => {
     if (!quote || !isCrossChain) return 0n;
