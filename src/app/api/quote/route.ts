@@ -771,7 +771,16 @@ export async function POST(req: Request) {
       }
 
       const minAmount = reason === 'MIN_AMOUNT' ? cachedMin : null;
-      const retryable = reason === 'NO_LIQUIDITY' && isNoQuoteLike(s) && !isUnfixableForBiggerAmount(s);
+      // Retry once when likely transient (LI.FI sometimes returns "internal error" / 5xx).
+      const transient =
+        r.status >= 500 ||
+        s.includes('internal error') ||
+        s.includes('internal server error') ||
+        s.includes('temporarily') ||
+        s.includes('timeout');
+      const retryable =
+        transient ||
+        (reason === 'NO_LIQUIDITY' && isNoQuoteLike(s) && !isUnfixableForBiggerAmount(s));
       return NextResponse.json(
         { error: normalizeQuoteError(reason, fallback), reason, retryable, ...(minAmount ? { minAmount } : {}) },
         { status: r.status >= 500 ? 502 : 400 },
