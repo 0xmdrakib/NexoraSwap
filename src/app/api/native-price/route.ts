@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { CHAINS } from '@/lib/chainsMeta';
+import { CHAIN_META } from '@/lib/chainsMeta';
 
 // Small in-memory cache (best-effort; helps avoid rate limits).
 declare global {
@@ -92,7 +92,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const chainId = Number(searchParams.get('chainId') || '');
 
-  const meta = CHAINS[chainId];
+  const meta = CHAIN_META[chainId];
   if (!meta) {
     return NextResponse.json(
       { ok: false, error: 'Unsupported chainId' },
