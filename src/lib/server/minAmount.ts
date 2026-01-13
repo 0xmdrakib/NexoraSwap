@@ -52,6 +52,57 @@ async function readJsonSafely(res: Response): Promise<{ json: any | null; text: 
   }
 }
 
+type LifiTools = {
+  exchanges?: Array<{ key: string; name?: string; supportedChains?: Array<string | number> }>;
+  bridges?: any[];
+};
+
+async function getLifiTools(): Promise<LifiTools> {
+  const cached = cacheGet<LifiTools>('lifi:tools:v1');
+  if (cached) return cached;
+
+  const r = await fetchWithTimeout(`${LIFI_BASE}/v1/tools`, { headers: { accept: 'application/json' }, cache: 'no-store' }, 6500);
+  const { json } = await readJsonSafely(r);
+
+  const tools = (json || {}) as LifiTools;
+  if (r.ok && tools) {
+    cacheSet('lifi:tools:v1', tools, 60 * 60 * 1000); // 1h
+    return tools;
+  }
+  return { exchanges: [], bridges: [] };
+}
+
+function chainIdToString(x: any): string {
+  try {
+    return String(x);
+  } catch {
+    return '';
+  }
+}
+
+async function resolveExchangeKeyByName(partialName: string, chainId: number): Promise<string | null> {
+  const cacheKey = `lifi:exchangeKey:${partialName.toLowerCase()}:${chainId}`;
+  const hit = cacheGet<string>(cacheKey);
+  if (hit) return hit;
+
+  const tools = await getLifiTools();
+  const exchanges = Array.isArray(tools?.exchanges) ? tools.exchanges : [];
+
+  const want = partialName.toLowerCase();
+  const chain = String(chainId);
+
+  const match = exchanges.find((e: any) => {
+    const n = String(e?.name || '').toLowerCase();
+    if (!n.includes(want)) return false;
+    const sc = Array.isArray(e?.supportedChains) ? e.supportedChains.map(chainIdToString) : [];
+    return sc.length ? sc.includes(chain) : true;
+  });
+
+  const key = match?.key ? String(match.key) : null;
+  if (key) cacheSet(cacheKey, key, 6 * 60 * 60 * 1000); // 6h
+  return key;
+}
+
 function formatTokenUnits(amount: bigint, decimals: number, maxDp = 8): string {
   try {
     const s = formatUnits(amount, decimals);
@@ -108,7 +159,8 @@ async function lifiQuoteOk(body: QuoteRequest, headers: Record<string, string>, 
     integrator: INTEGRATOR,
   });
 
-  const allowExchanges = router === 'balancer-direct' ? 'balancer' : null;
+  const allowExchanges = router === 'balancer-direct' ? await resolveExchangeKeyByName('balancer', body.fromChainId) : null;
+  if (router === 'balancer-direct' && !allowExchanges) return false;
   const allowBridges = router === 'gaszip' ? 'gasZipBridge' : null;
 
   if (allowExchanges) params.set('allowExchanges', allowExchanges);
