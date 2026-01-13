@@ -214,7 +214,7 @@ export default function SwapCard() {
       { value: 'lifi-smart', label: 'LiFi Smart Routing' },
       { value: 'oneinch-direct', label: '1inch Direct (same-chain)', disabled: isCrossChain },
       { value: 'balancer-direct', label: 'Balancer Direct (same-chain)', disabled: isCrossChain },
-      { value: 'gaszip', label: 'gas.zip (gas refuel)', disabled: !isCrossChain },
+      { value: 'gaszip', label: 'gas.zip (cross-chain only)', disabled: !isCrossChain },
     ];
   }, [isCrossChain]);
 
@@ -980,7 +980,9 @@ export default function SwapCard() {
                           }.`
                         : 'Amount too low for this pair. Calculating minimum…'
                       : quoteReason === 'NO_LIQUIDITY'
-                        ? 'Liquidity not found for this pair.'
+                        ? router === 'gaszip'
+                          ? 'This pair is not supported on gas.zip. Try LiFi Smart Routing.'
+                          : 'Liquidity not found for this pair.'
                         : quoteError}
                   </div>
                 )}
