@@ -707,14 +707,32 @@ export async function POST(req: Request) {
     }
   }
 
+  const router = body.router as RouterId;
+  const isCrossChain = body.fromChainId !== body.toChainId;
+
+  // Router capability guards
+  if (router === 'balancer-direct' && isCrossChain) {
+    return NextResponse.json(
+      { error: 'Balancer Direct supports same-chain swaps only.', reason: 'OTHER' },
+      { status: 400 },
+    );
+  }
+  if (router === 'gaszip' && !isCrossChain) {
+    return NextResponse.json(
+      { error: 'gas.zip route is for cross-chain swaps only.', reason: 'OTHER' },
+      { status: 400 },
+    );
+  }
+
   // Auto: prefer LiFi for cross-chain; you can extend this to benchmark multiple routers.
   // (For now, auto == LiFi Smart Routing.)
-  if (!(String(body.router).startsWith('lifi') || body.router === 'auto')) {
-    return NextResponse.json({ error: 'Router not implemented in this starter.' }, { status: 400 });
+  const isLiFiFamily = String(router).startsWith('lifi') || router === 'auto' || router === 'balancer-direct' || router === 'gaszip';
+  if (!isLiFiFamily) {
+    return NextResponse.json({ error: 'Router not implemented in this starter.', reason: 'OTHER' }, { status: 400 });
   }
 
   const slippage = Number(body.slippage);
-  const tool = pickTool(body.router);
+  const tool = pickTool(router);
 
   const params = new URLSearchParams({
     fromChain: String(body.fromChainId),
@@ -728,11 +746,20 @@ export async function POST(req: Request) {
     integrator: INTEGRATOR,
   });
 
-  // NOTE: tool forcing is NOT enabled yet.
-  // If you implement it, you'll likely add something like:
-  // params.set('allowExchanges', tool) or use an advanced route endpoint.
-  // Leaving it as a placeholder to keep the starter honest.
-  void tool;
+  // Tool forcing (best-effort):
+  // - balancer-direct: force Balancer as the same-chain DEX
+  // - gaszip: force gasZipBridge as the bridge for cross-chain
+  // - lifi-<dex>: force that DEX on LiFi (if supported)
+  const allowExchanges =
+    router === 'balancer-direct'
+      ? 'balancer'
+      : String(router).startsWith('lifi-') && router !== 'lifi-smart'
+        ? tool
+        : null;
+  const allowBridges = router === 'gaszip' ? 'gasZipBridge' : null;
+
+  if (allowExchanges) params.set('allowExchanges', allowExchanges);
+  if (allowBridges) params.set('allowBridges', allowBridges);
 
   try {
     const r = await fetchWithTimeout(`${LIFI_BASE}/v1/quote?${params.toString()}`, { headers, cache: 'no-store' });
