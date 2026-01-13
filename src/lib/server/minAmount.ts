@@ -88,6 +88,14 @@ export function getCachedMinAmountHint(body: QuoteRequest): MinAmountHint | null
 async function lifiQuoteOk(body: QuoteRequest, headers: Record<string, string>, fromAmount: bigint): Promise<boolean> {
   const slippage = Number(body.slippage);
 
+  const router = body.router;
+
+  // Route capability guards
+  // - balancer-direct: same-chain only
+  // - gaszip: cross-chain only
+  if (router === 'balancer-direct' && body.fromChainId !== body.toChainId) return false;
+  if (router === 'gaszip' && body.fromChainId === body.toChainId) return false;
+
   const params = new URLSearchParams({
     fromChain: String(body.fromChainId),
     toChain: String(body.toChainId),
@@ -99,6 +107,12 @@ async function lifiQuoteOk(body: QuoteRequest, headers: Record<string, string>, 
     slippage: String(slippage),
     integrator: INTEGRATOR,
   });
+
+  const allowExchanges = router === 'balancer-direct' ? 'balancer' : null;
+  const allowBridges = router === 'gaszip' ? 'gasZipBridge' : null;
+
+  if (allowExchanges) params.set('allowExchanges', allowExchanges);
+  if (allowBridges) params.set('allowBridges', allowBridges);
 
   const r = await fetchWithTimeout(`${LIFI_BASE}/v1/quote?${params.toString()}`, { headers, cache: 'no-store' });
   const { json } = await readJsonSafely(r);
