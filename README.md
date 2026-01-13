@@ -2,15 +2,16 @@ Nexora Swap is live 🚀
 
 A multi-router DEX UI that makes swaps feels *clean*:
 • Same-chain: Auto (best) between 1inch + LI.FI
-• Cross-chain: LI.FI (bridge + swap).
+• Cross-chain: LI.FI + gas.zip (bridge + swap).
 • Clean “min received”, balances + USD, and human-friendly errors.
 
 Try it: https://nexoraswap.vercel.app
 
 2/ Routing logic (simple, predictable):
 
-✅ From chain ≠ To chain → LI.FI only (bridging + swap)
+✅ From chain ≠ To chain → LI.FI (bridging + swap)
 ✅ Same chain → Auto compares routes (1inch vs LI.FI)
+✅ From chain ≠ To chain → gas.zip (only bridge)
 ↳ You can manually switch the route any time.
 
 The UI shows which dex/liquidity used.
@@ -55,3 +56,4 @@ Reply with:
 Next upgrades I’m considering:
 More clean + faster UI, better route details, more swap route, and many more.
 Let’s make swaps less painful. 🧠⚡️
+
