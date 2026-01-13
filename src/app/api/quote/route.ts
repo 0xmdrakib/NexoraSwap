@@ -235,8 +235,6 @@ function pickTool(router: RouterId): string | null {
       return '1inch';
     case 'lifi-uniswap':
       return 'uniswap';
-    case 'lifi-balancer':
-      return 'balancer';
     case 'lifi-pancake':
       return 'pancake';
     default:
@@ -763,12 +761,6 @@ export async function POST(req: Request) {
   const isCrossChain = body.fromChainId !== body.toChainId;
 
   // Router capability guards
-  if (router === 'balancer-direct' && isCrossChain) {
-    return NextResponse.json(
-      { error: 'Balancer Direct supports same-chain swaps only.', reason: 'OTHER' },
-      { status: 400 },
-    );
-  }
   if (router === 'gaszip' && !isCrossChain) {
     return NextResponse.json(
       { error: 'gas.zip route is for cross-chain swaps only.', reason: 'OTHER' },
@@ -778,7 +770,7 @@ export async function POST(req: Request) {
 
   // Auto: prefer LiFi for cross-chain; you can extend this to benchmark multiple routers.
   // (For now, auto == LiFi Smart Routing.)
-  const isLiFiFamily = String(router).startsWith('lifi') || router === 'auto' || router === 'balancer-direct' || router === 'gaszip';
+  const isLiFiFamily = String(router).startsWith('lifi') || router === 'auto' || router === 'gaszip';
   if (!isLiFiFamily) {
     return NextResponse.json({ error: 'Router not implemented in this starter.', reason: 'OTHER' }, { status: 400 });
   }
@@ -800,24 +792,10 @@ export async function POST(req: Request) {
 
 
   // Tool forcing (best-effort):
-  // - balancer-direct: force Balancer as the same-chain DEX
   // - gaszip: force gasZipBridge as the bridge for cross-chain
   // - lifi-<dex>: force that DEX on LiFi (if supported)
   let allowExchanges: string | null =
     String(router).startsWith('lifi-') && router !== 'lifi-smart' ? tool : null;
-
-  if (router === 'balancer-direct') {
-    allowExchanges = await resolveExchangeKeyByName('balancer', body.fromChainId);
-    if (!allowExchanges) {
-      throw makeQuoteApiError('Balancer is not available on this chain. Try LiFi Smart Routing.', 422, { reason: 'NO_LIQUIDITY' }, '');
-    }
-  }
-
-  // If Balancer forcing is enabled via a LiFi-prefixed router, resolve the actual key too.
-  if (allowExchanges && allowExchanges.toLowerCase() === 'balancer') {
-    const resolved = await resolveExchangeKeyByName('balancer', body.fromChainId);
-    if (resolved) allowExchanges = resolved;
-  }
 
   const allowBridges = router === 'gaszip' ? 'gasZipBridge' : null;
 
