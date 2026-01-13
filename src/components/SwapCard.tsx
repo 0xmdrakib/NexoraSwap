@@ -207,18 +207,14 @@ export default function SwapCard() {
   }, [isCrossChain, router]);
 
   const routeOptions = useMemo(() => {
-    if (isCrossChain) {
-      return [
-        { value: 'lifi-smart', label: 'LiFi Smart Routing' },
-        { value: 'gaszip', label: 'gas.zip (gas refuel)' },
-      ];
-    }
-
+    // Always show all routes, but disable ones that don't apply.
+    // This keeps the menu consistent and avoids "where did my option go?" confusion.
     return [
-      { value: 'auto', label: 'Auto (best)' },
+      { value: 'auto', label: 'Auto (best)', disabled: isCrossChain },
       { value: 'lifi-smart', label: 'LiFi Smart Routing' },
-      { value: 'oneinch-direct', label: '1inch Direct (same-chain)' },
-      { value: 'balancer-direct', label: 'Balancer Direct (same-chain)' },
+      { value: 'oneinch-direct', label: '1inch Direct (same-chain)', disabled: isCrossChain },
+      { value: 'balancer-direct', label: 'Balancer Direct (same-chain)', disabled: isCrossChain },
+      { value: 'gaszip', label: 'gas.zip (gas refuel)', disabled: !isCrossChain },
     ];
   }, [isCrossChain]);
 
@@ -866,17 +862,7 @@ export default function SwapCard() {
               <Select
                 value={router}
                 onChange={(v) => setRouter(v as RouterId)}
-                options={[
-                  { value: 'auto', label: 'Auto (best)' },
-                  { value: 'lifi-smart', label: 'LiFi Smart Routing' },
-                  {
-                    value: 'oneinch-direct',
-                    label: chainId === toChainId ? '1inch Direct (same-chain)' : '1inch Direct (same-chain only)',
-                    disabled: chainId !== toChainId,
-                  },
-                  { value: 'balancer-direct', label: 'Balancer Direct (coming soon)', disabled: true },
-                  { value: 'gaszip', label: 'gas.zip (gas refuel) (coming soon)', disabled: true },
-                ]}
+                options={routeOptions}
               />
             </div>
             <div className="mt-1 text-[11px] text-white/45">
