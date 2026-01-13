@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { formatUnits, parseUnits, getAddress, isAddress } from 'viem';
 import type { QuoteErrorReason, QuoteRequest, QuoteResponse, RouterId } from '@/lib/types';
 import { getCachedMinAmountHint } from '@/lib/server/minAmount';
+import { cacheGet, cacheSet } from '@/lib/server/cache';
 
 const LIFI_BASE = process.env.LIFI_BASE_URL || 'https://li.quest';
 const INTEGRATOR = process.env.LIFI_INTEGRATOR || 'swapdex-starter';
@@ -282,6 +283,57 @@ async function readJsonSafely(res: Response): Promise<{ json: any | null; text: 
   } catch {
     return { json: null, text };
   }
+}
+
+type LifiTools = {
+  exchanges?: Array<{ key: string; name?: string; supportedChains?: Array<string | number> }>;
+  bridges?: any[];
+};
+
+async function getLifiTools(): Promise<LifiTools> {
+  const cached = cacheGet<LifiTools>('lifi:tools:v1');
+  if (cached) return cached;
+
+  const r = await fetchWithTimeout(`${LIFI_BASE}/v1/tools`, { headers: { accept: 'application/json' }, cache: 'no-store' }, 6500);
+  const { json } = await readJsonSafely(r);
+
+  const tools = (json || {}) as LifiTools;
+  if (r.ok && tools) {
+    cacheSet('lifi:tools:v1', tools, 60 * 60 * 1000); // 1h
+    return tools;
+  }
+  return { exchanges: [], bridges: [] };
+}
+
+function chainIdToString(x: any): string {
+  try {
+    return String(x);
+  } catch {
+    return '';
+  }
+}
+
+async function resolveExchangeKeyByName(partialName: string, chainId: number): Promise<string | null> {
+  const cacheKey = `lifi:exchangeKey:${partialName.toLowerCase()}:${chainId}`;
+  const hit = cacheGet<string>(cacheKey);
+  if (hit) return hit;
+
+  const tools = await getLifiTools();
+  const exchanges = Array.isArray(tools?.exchanges) ? tools.exchanges : [];
+
+  const want = partialName.toLowerCase();
+  const chain = String(chainId);
+
+  const match = exchanges.find((e: any) => {
+    const n = String(e?.name || '').toLowerCase();
+    if (!n.includes(want)) return false;
+    const sc = Array.isArray(e?.supportedChains) ? e.supportedChains.map(chainIdToString) : [];
+    return sc.length ? sc.includes(chain) : true;
+  });
+
+  const key = match?.key ? String(match.key) : null;
+  if (key) cacheSet(cacheKey, key, 6 * 60 * 60 * 1000); // 6h
+  return key;
 }
 
 function lifiHumanError(status: number, payload: any | null, text: string): string {
@@ -746,20 +798,32 @@ export async function POST(req: Request) {
     integrator: INTEGRATOR,
   });
 
+
   // Tool forcing (best-effort):
   // - balancer-direct: force Balancer as the same-chain DEX
   // - gaszip: force gasZipBridge as the bridge for cross-chain
   // - lifi-<dex>: force that DEX on LiFi (if supported)
-  const allowExchanges =
-    router === 'balancer-direct'
-      ? 'balancer'
-      : String(router).startsWith('lifi-') && router !== 'lifi-smart'
-        ? tool
-        : null;
+  let allowExchanges: string | null =
+    String(router).startsWith('lifi-') && router !== 'lifi-smart' ? tool : null;
+
+  if (router === 'balancer-direct') {
+    allowExchanges = await resolveExchangeKeyByName('balancer', body.fromChainId);
+    if (!allowExchanges) {
+      throw makeQuoteApiError('Balancer is not available on this chain. Try LiFi Smart Routing.', 422, { reason: 'NO_LIQUIDITY' }, '');
+    }
+  }
+
+  // If Balancer forcing is enabled via a LiFi-prefixed router, resolve the actual key too.
+  if (allowExchanges && allowExchanges.toLowerCase() === 'balancer') {
+    const resolved = await resolveExchangeKeyByName('balancer', body.fromChainId);
+    if (resolved) allowExchanges = resolved;
+  }
+
   const allowBridges = router === 'gaszip' ? 'gasZipBridge' : null;
 
   if (allowExchanges) params.set('allowExchanges', allowExchanges);
   if (allowBridges) params.set('allowBridges', allowBridges);
+
 
   try {
     const r = await fetchWithTimeout(`${LIFI_BASE}/v1/quote?${params.toString()}`, { headers, cache: 'no-store' });
