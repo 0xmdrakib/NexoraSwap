@@ -33,7 +33,6 @@ function aggregatorName(router: RouterId) {
   const r = String(router);
   if (r.startsWith('lifi')) return 'LI.FI';
   if (r.startsWith('oneinch')) return '1inch';
-  if (r.startsWith('balancer')) return 'Balancer';
   if (r.startsWith('gaszip')) return 'gas.zip';
   if (r.startsWith('uniswap')) return 'Uniswap';
   if (r.startsWith('pancake')) return 'PancakeSwap';
@@ -213,7 +212,6 @@ export default function SwapCard() {
       { value: 'auto', label: 'Auto (best)', disabled: isCrossChain },
       { value: 'lifi-smart', label: 'LiFi Smart Routing' },
       { value: 'oneinch-direct', label: '1inch Direct (same-chain)', disabled: isCrossChain },
-      { value: 'balancer-direct', label: 'Balancer Direct (same-chain)', disabled: isCrossChain },
       { value: 'gaszip', label: 'gas.zip (cross-chain only)', disabled: !isCrossChain },
     ];
   }, [isCrossChain]);
@@ -254,8 +252,8 @@ export default function SwapCard() {
       return { ...quoteReqCommon, router: router === 'gaszip' ? 'gaszip' : 'lifi-smart' };
     }
 
-    // Same-chain: allow manual Balancer Direct (via LiFi) or LiFi Smart Routing.
-    if (!(autoEnabled || router === 'lifi-smart' || router === 'balancer-direct')) return undefined;
+    // Same-chain: allow LiFi Smart Routing.
+    if (!(autoEnabled || router === 'lifi-smart')) return undefined;
     return { ...quoteReqCommon, router: autoEnabled ? 'lifi-smart' : router };
   }, [quoteReqCommon, autoEnabled, router, isCrossChain]);
 
