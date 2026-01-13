@@ -142,9 +142,7 @@ async function lifiQuoteOk(body: QuoteRequest, headers: Record<string, string>, 
   const router = body.router;
 
   // Route capability guards
-  // - balancer-direct: same-chain only
   // - gaszip: cross-chain only
-  if (router === 'balancer-direct' && body.fromChainId !== body.toChainId) return false;
   if (router === 'gaszip' && body.fromChainId === body.toChainId) return false;
 
   const params = new URLSearchParams({
@@ -159,11 +157,8 @@ async function lifiQuoteOk(body: QuoteRequest, headers: Record<string, string>, 
     integrator: INTEGRATOR,
   });
 
-  const allowExchanges = router === 'balancer-direct' ? await resolveExchangeKeyByName('balancer', body.fromChainId) : null;
-  if (router === 'balancer-direct' && !allowExchanges) return false;
   const allowBridges = router === 'gaszip' ? 'gasZipBridge' : null;
 
-  if (allowExchanges) params.set('allowExchanges', allowExchanges);
   if (allowBridges) params.set('allowBridges', allowBridges);
 
   const r = await fetchWithTimeout(`${LIFI_BASE}/v1/quote?${params.toString()}`, { headers, cache: 'no-store' });
