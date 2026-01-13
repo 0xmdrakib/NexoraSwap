@@ -194,21 +194,33 @@ export default function SwapCard() {
   const isCrossChain = chainId !== toChainId;
 
   useEffect(() => {
-    // Safety: 1inch cannot do cross-chain swaps. Force LiFi when chains differ.
-    if (isCrossChain && router !== 'lifi-smart') setRouter('lifi-smart');
+    // Safety: same-chain-only routers must not be used for cross-chain swaps.
+    // Cross-chain swaps are handled by LiFi. We allow forcing gas.zip bridge
+    // on cross-chain, otherwise default to LiFi Smart Routing.
+    if (isCrossChain) {
+      if (router !== 'lifi-smart' && router !== 'gaszip') setRouter('lifi-smart');
+      return;
+    }
+
+    // gas.zip is cross-chain only; if user switches back to same-chain, fall back.
+    if (!isCrossChain && router === 'gaszip') setRouter('auto');
   }, [isCrossChain, router]);
 
-  const routeOptions = useMemo(
-    () =>
-      isCrossChain
-        ? [{ value: 'lifi-smart', label: 'LiFi Smart Routing' }]
-        : [
-            { value: 'auto', label: 'Auto (best)' },
-            { value: 'oneinch-direct', label: '1inch (same-chain)' },
-            { value: 'lifi-smart', label: 'LiFi Smart Routing' },
-          ],
-    [isCrossChain]
-  );
+  const routeOptions = useMemo(() => {
+    if (isCrossChain) {
+      return [
+        { value: 'lifi-smart', label: 'LiFi Smart Routing' },
+        { value: 'gaszip', label: 'gas.zip (gas refuel)' },
+      ];
+    }
+
+    return [
+      { value: 'auto', label: 'Auto (best)' },
+      { value: 'lifi-smart', label: 'LiFi Smart Routing' },
+      { value: 'oneinch-direct', label: '1inch Direct (same-chain)' },
+      { value: 'balancer-direct', label: 'Balancer Direct (same-chain)' },
+    ];
+  }, [isCrossChain]);
 
   // Auto routing strategy (production-realistic):
   // - Cross-chain => LiFi only
@@ -241,9 +253,14 @@ export default function SwapCard() {
 
   const quoteReqLiFi: QuoteRequest | undefined = useMemo(() => {
     if (!quoteReqCommon) return undefined;
-    if (isCrossChain) return { ...quoteReqCommon, router: 'lifi-smart' };
-    if (!(autoEnabled || router === 'lifi-smart')) return undefined;
-    return { ...quoteReqCommon, router: 'lifi-smart' };
+    if (isCrossChain) {
+      // Cross-chain: allow gas.zip forcing, otherwise use LiFi Smart Routing.
+      return { ...quoteReqCommon, router: router === 'gaszip' ? 'gaszip' : 'lifi-smart' };
+    }
+
+    // Same-chain: allow manual Balancer Direct (via LiFi) or LiFi Smart Routing.
+    if (!(autoEnabled || router === 'lifi-smart' || router === 'balancer-direct')) return undefined;
+    return { ...quoteReqCommon, router: autoEnabled ? 'lifi-smart' : router };
   }, [quoteReqCommon, autoEnabled, router, isCrossChain]);
 
   const one = useQuote(quoteReqOneInch);
