@@ -20,10 +20,8 @@ export type RouterId =
   | 'lifi-smart'
   | 'lifi-uniswap'
   | 'lifi-1inch'
-  | 'lifi-balancer'
   | 'lifi-pancake'
   | 'oneinch-direct'
-  | 'balancer-direct'
   | 'uniswap-subgraph-only'
   | 'gaszip';
 
