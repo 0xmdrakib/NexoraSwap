@@ -5,7 +5,7 @@ A multi-router DEX UI that makes swaps feels *clean*:
 • Cross-chain: LI.FI + gas.zip (bridge + swap).
 • Clean “min received”, balances + USD, and human-friendly errors.
 
-Try it: https://nexoraswap.vercel.app
+Try it: https://nexoraswap.online
 
 2/ Routing logic (simple, predictable):
 
@@ -55,5 +55,6 @@ Reply with:
 Next upgrades I’m considering:
 More clean + faster UI, better route details, more swap route, and many more.
 Let’s make swaps less painful. 🧠⚡️
+
 
 
