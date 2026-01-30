@@ -2,7 +2,7 @@ import SwapCard from '@/components/SwapCard';
 
 export default function Page() {
   return (
-    <main className="min-h-screen px-4 py-6 sm:py-10">
+    <main className="px-4 py-6 sm:py-10">
       <div className="mx-auto max-w-lg lg:max-w-xl">
         <div className="mb-9 flex flex-col items-center text-center">
           <h1 className="relative mt-5 text-5xl sm:text-6xl font-semibold tracking-[-0.04em] leading-[1.02] bg-gradient-to-b from-white via-white/90 to-white/55 bg-clip-text text-transparent drop-shadow-sm">
