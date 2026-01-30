@@ -19,14 +19,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className="min-h-screen">
         <Providers>
-          <div className="min-h-screen pb-[calc(56px+env(safe-area-inset-bottom))]">
+          <div className="min-h-screen">
             {children}
           </div>
 
-          <footer className="fixed bottom-0 left-0 right-0 z-50">
-            <div className="mx-auto max-w-6xl px-4 py-3 pb-[calc(12px+env(safe-area-inset-bottom))] text-center text-[11px] sm:text-xs font-medium tracking-wide text-white/60">
+          <footer className="fixed left-1/2 -translate-x-1/2 bottom-[calc(10px+env(safe-area-inset-bottom))] z-50 pointer-events-none">
+            <p className="text-center text-[11px] sm:text-xs font-medium tracking-wide text-white/60">
               © 2026 Md. Rakib • made with love and passion • All Rights Reserved.
-            </div>
+            </p>
           </footer>
         </Providers>
       </body>
