@@ -387,11 +387,11 @@ export default function TokenSelect({
       {/* Modal */}
       {open && (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 sm:p-8"
           onClick={() => setOpen(false)}
         >
           <div
-            className="w-full max-w-[620px] rounded-3xl border border-white/10 bg-black/80 p-4 shadow-2xl backdrop-blur"
+            className="w-full max-w-[520px] md:max-w-[560px] rounded-3xl border border-white/10 bg-black/80 p-4 shadow-2xl backdrop-blur"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-3">
