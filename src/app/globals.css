@@ -18,6 +18,11 @@ body {
 html {
   font-size: 12.6px;
 }
+/* Mobile: make the whole UI ~10% smaller WITHOUT using transform scale.
+   This keeps layout + fixed-position dialogs correct on phone browsers. */
+@media (max-width: 639px) {
+  html { font-size: 11.34px; }
+}
 @media (min-width: 1024px) {
   html { font-size: 13.5px; }
 }
