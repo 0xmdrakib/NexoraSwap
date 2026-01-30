@@ -17,18 +17,20 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="min-h-[100svh] overflow-x-hidden">
+      <body className="min-h-[100dvh] overflow-x-hidden">
         <Providers>
           {/*
-            Phone: scale the whole UI down ~10% by default.
-            Desktop/tablet: restore normal scale.
+            IMPORTANT (mobile): do NOT use transform scale on the root wrapper.
+            - It creates empty “dead space” (layout size doesn’t shrink).
+            - It breaks dialogs/overlays (position: fixed becomes relative to the transformed ancestor).
+            We handle the ~10% mobile shrink in globals.css via the root font-size instead.
           */}
-          <div className="min-h-[100svh] flex flex-col scale-[0.9] sm:scale-100 origin-top">
+          <div className="min-h-[100dvh] flex flex-col">
             <div className="flex-1">{children}</div>
 
-            {/* Text-only footer (in flow) — no fixed bar/layer */}
-            <footer className="pb-[calc(10px+env(safe-area-inset-bottom))] pt-2">
-              <p className="text-center text-[11px] sm:text-xs font-medium tracking-wide text-white/60">
+            {/* Text-only footer (in flow) — no bar/layer, no overlay */}
+            <footer className="pt-2 pb-[calc(12px+env(safe-area-inset-bottom))]">
+              <p className="text-center text-xs font-medium tracking-wide text-white/60">
                 © 2026 Md. Rakib • made with love and passion • All Rights Reserved.
               </p>
             </footer>
