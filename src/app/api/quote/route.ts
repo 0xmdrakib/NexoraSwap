@@ -474,7 +474,8 @@ async function lifiQuoteOk(
   fromAmount: bigint,
   timeoutMs = 2500,
 ): Promise<boolean> {
-  const slippage = Number(body.slippage);
+  const s = Number(body.slippage);
+  const slippage = Number.isFinite(s) ? Math.max(0.0001, Math.min(0.2, s)) : 0.005;
 
   const params = new URLSearchParams({
     fromChain: String(body.fromChainId),
@@ -512,10 +513,11 @@ async function oneInchQuote(body: QuoteRequest): Promise<QuoteResponse> {
   const bases = getOneInchBaseCandidates();
   const chainId = body.fromChainId;
 
-  // 1inch expects slippage in percent
-  // Our UI already stores slippage as a percent (e.g. 0.5 means 0.5%).
-  // So pass it through directly.
-  const slippagePct = Math.max(0.01, Math.min(50, body.slippage));
+  // 1inch expects slippage in percent.
+  // Our client sends slippage as a *fraction* (e.g. 0.005 means 0.5%).
+  const rawSlip = Number(body.slippage);
+  const slipPct = Number.isFinite(rawSlip) ? rawSlip * 100 : 0.5;
+  const slippagePct = Math.max(0.01, Math.min(50, slipPct));
 
   const authHeader = getOneInchAuthorizationHeader();
 
@@ -775,7 +777,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Router not implemented in this starter.', reason: 'OTHER' }, { status: 400 });
   }
 
-  const slippage = Number(body.slippage);
+  const s = Number(body.slippage);
+  const slippage = Number.isFinite(s) ? Math.max(0.0001, Math.min(0.2, s)) : 0.005;
   const tool = pickTool(router);
 
   const params = new URLSearchParams({
