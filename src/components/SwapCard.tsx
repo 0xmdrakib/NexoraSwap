@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import {
   useAccount,
@@ -121,12 +121,27 @@ export default function SwapCard() {
   const [amountUI, setAmountUI] = useState('');
   const debouncedAmountUI = useDebounce(amountUI, 350);
 
-  const [slippageUI, setSlippageUI] = useState(0.5); // %
-  const slippage = clamp(slippageUI, 0.01, 20) / 100;
+  // Slippage UI is expressed in percent (0.01 .. 20). Quote APIs expect a fraction (0.0001 .. 0.2).
+  // Default: Auto slippage ON.
+  const [slippageAuto, setSlippageAuto] = useState(true);
+  const [slippageUI, setSlippageUI] = useState(0.5); // % (manual)
 
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const [router, setRouter] = useState<RouterId>('auto');
+
+  // Used to stage cross-chain "swap sides" so we can switch the wallet network and keep tokens intact.
+  const suppressTokenResetOnChainChange = useRef(false);
+  const suppressToTokenResetOnToChainChange = useRef(false);
+  const pendingFlip = useRef<
+    | null
+    | {
+        targetChainId: number;
+        newToChainId: number;
+        newFromToken: Token | null;
+        newToToken: Token | null;
+      }
+  >(null);
 
   // Used to force fresh balance reads right after a confirmed swap.
   const [balanceNonce, setBalanceNonce] = useState(0);
@@ -138,16 +153,39 @@ export default function SwapCard() {
 
   // When wallet chain changes, reset tokens to avoid mismatches.
   useEffect(() => {
+    if (suppressTokenResetOnChainChange.current) {
+      suppressTokenResetOnChainChange.current = false;
+      return;
+    }
     setFromToken(null);
     setToToken(null);
   }, [chainId]);
 
   // If user switches destination chain, clear the destination token (chain-first UX).
   useEffect(() => {
+    if (suppressToTokenResetOnToChainChange.current) {
+      suppressToTokenResetOnToChainChange.current = false;
+      return;
+    }
     // Changing destination chain invalidates the current quote/tx state
     setToToken(null);
     setLastTx(null);
   }, [toChainId]);
+
+  // If we initiated a cross-chain side-swap, apply the staged tokens/chains once the wallet is on the new source chain.
+  useEffect(() => {
+    const p = pendingFlip.current;
+    if (!p) return;
+    if (chainId !== p.targetChainId) return;
+
+    suppressToTokenResetOnToChainChange.current = true;
+    setToChainId(p.newToChainId);
+    setToChainManual(true);
+    setFromToken(p.newFromToken);
+    setToToken(p.newToToken);
+    setLastTx(null);
+    pendingFlip.current = null;
+  }, [chainId]);
 
   const fromAmountRaw = useMemo(() => {
     if (!fromToken) return '0';
@@ -191,6 +229,19 @@ export default function SwapCard() {
   }, [fromToken, fromBalance, fromAmountRaw]);
 
   const isCrossChain = chainId !== toChainId;
+
+  const autoSlippageUI = useMemo(() => {
+    const a = (fromToken?.symbol || '').toUpperCase();
+    const b = (toToken?.symbol || '').toUpperCase();
+    const stable = new Set(['USDC', 'USDT', 'DAI', 'FRAX', 'LUSD', 'USDE']);
+    const isStablePair = stable.has(a) && stable.has(b);
+    if (isStablePair) return 0.1;
+    if (isCrossChain) return 1.0;
+    return 0.5;
+  }, [fromToken?.symbol, toToken?.symbol, isCrossChain]);
+
+  const slippageUIEffective = slippageAuto ? autoSlippageUI : slippageUI;
+  const slippage = clamp(slippageUIEffective, 0.01, 20) / 100;
 
   useEffect(() => {
     // Safety: same-chain-only routers must not be used for cross-chain swaps.
@@ -789,14 +840,42 @@ export default function SwapCard() {
         <div className="flex justify-center">
           <button
             className="rounded-full border border-white/10 bg-white/5 p-2 text-white/75 hover:bg-white/10"
-            onClick={() => {
-              // Swap sides (same-chain only)
-              if (toChainId !== chainId) return;
-              const a = fromToken;
-              setFromToken(toToken);
-              setToToken(a);
+            onClick={async () => {
+              if (!fromToken || !toToken) return;
+
+              // Same-chain: just swap tokens.
+              if (toChainId === chainId) {
+                const a = fromToken;
+                setFromToken(toToken);
+                setToToken(a);
+                return;
+              }
+
+              // Cross-chain: swap tokens AND swap source/destination chains.
+              // Requires switching the wallet network to the previous destination chain.
+              if (!switchChainAsync) {
+                setUiError('Wallet does not support network switching.');
+                return;
+              }
+
+              try {
+                suppressTokenResetOnChainChange.current = true;
+                pendingFlip.current = {
+                  targetChainId: toChainId,
+                  newToChainId: chainId,
+                  newFromToken: toToken,
+                  newToToken: fromToken,
+                };
+                setToChainManual(true);
+                await switchChainAsync({ chainId: toChainId });
+              } catch (e: any) {
+                // If the user rejects the chain switch, clean up.
+                pendingFlip.current = null;
+                suppressTokenResetOnChainChange.current = false;
+                setUiError(e?.shortMessage || e?.message || 'Failed to switch network');
+              }
             }}
-            title={toChainId !== chainId ? 'Switching sides is disabled for cross-chain' : 'Swap tokens'}
+            title={toChainId !== chainId ? 'Swap sides (will switch network)' : 'Swap tokens'}
           >
             <ArrowDownUp size={18} />
           </button>
@@ -841,17 +920,44 @@ export default function SwapCard() {
 
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-3">
-            <div className="text-xs text-white/60">Slippage</div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-xs text-white/60">Slippage</div>
+              <button
+                type="button"
+                onClick={() => setSlippageAuto((v) => !v)}
+                className="rounded-full border border-white/10 bg-black/30 px-2 py-1 text-[11px] text-white/70 hover:bg-white/10 hover:text-white/90"
+                title={slippageAuto ? 'Auto slippage is ON' : 'Auto slippage is OFF'}
+              >
+                {slippageAuto ? 'Auto' : 'Manual'}
+              </button>
+            </div>
             <div className="mt-2 flex items-center gap-2">
               <input
                 className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm outline-none"
-                value={slippageUI}
-                onChange={(e) => setSlippageUI(safeParseFloat(e.target.value))}
+                type="number"
+                min={0.01}
+                max={20}
+                step={0.01}
+                value={slippageUIEffective}
+                disabled={slippageAuto}
+                onChange={(e) => {
+                  if (slippageAuto) return;
+                  setSlippageUI(clamp(safeParseFloat(e.target.value), 0.01, 20));
+                }}
+                onBlur={() => {
+                  if (slippageAuto) return;
+                  setSlippageUI((v) => clamp(v, 0.01, 20));
+                }}
                 inputMode="decimal"
               />
               <span className="text-xs text-white/60">%</span>
             </div>
             <div className="mt-1 text-[11px] text-white/45">Allowed: 0.01% – 20%</div>
+            {slippageAuto ? (
+              <div className="mt-1 text-[11px] text-white/45">
+                Auto is using {autoSlippageUI.toFixed(2).replace(/\.00$/, '')}%
+              </div>
+            ) : null}
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-3">
