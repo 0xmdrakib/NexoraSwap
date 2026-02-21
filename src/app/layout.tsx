@@ -4,7 +4,7 @@ import Providers from './providers';
 
 export const metadata: Metadata = {
   title: 'Nexora Swap',
-  description: 'Nexora Swap — a multi-router swap UI starter (LiFi + optional adapters) built with RainbowKit + wagmi.',
+  description: 'Nexora Swap — a multi router DEX.',
 };
 
 
