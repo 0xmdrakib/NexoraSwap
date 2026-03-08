@@ -2,7 +2,7 @@
 
 Nexora Swap is a multi-router DEX interface for fast, cleaner token swaps across major EVM chains.
 
-**Live app:** https://nexoraswap.online/
+**Live app:** https://nexoraswap.online
 
 ---
 
@@ -103,6 +103,7 @@ src/
 ## License
 
 This project is licensed under the [MIT License](./LICENSE).
+
 
 
 
