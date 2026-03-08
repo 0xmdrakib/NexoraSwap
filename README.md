@@ -81,15 +81,6 @@ npm run dev
 
 Open `http://localhost:3000` in your browser.
 
-## Environment notes
-
-- `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` is needed for wallet connection.
-- `MORALIS_API_KEY` powers wallet token balances, token metadata, and pricing fallbacks used by the UI.
-- `LIFI_API_KEY` is optional, but useful if you want authenticated LI.FI requests.
-- `ONEINCH_API_KEY` or `ONEINCH_AUTHORIZATION` can be used for 1inch authenticated access; the code also contains public-host fallbacks.
-- `ALCHEMY_RPC_URL` or `ALCHEMY_RPC_URL_<CHAIN_ID>` helps on-chain token metadata fallback.
-- `THEGRAPH_API_KEY`, `UNISWAP_SUBGRAPH_ID`, and `NODEREAL_PANCAKE_GRAPHQL_URL` are only needed if you want those optional proxy routes available.
-
 ## Project structure
 
 ```text
@@ -106,4 +97,5 @@ src/
 ## License
 
 This project is licensed under the [MIT License](./LICENSE).
+
 
