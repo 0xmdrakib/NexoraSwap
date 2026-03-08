@@ -31,7 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             {/* Text-only footer (in flow) — no bar/layer, no overlay */}
             <footer className="pt-2 pb-[calc(12px+env(safe-area-inset-bottom))]">
               <p className="text-center text-xs font-medium tracking-wide text-white/60">
-                © 2026 Md. Rakib • made with love and passion
+                © 2026 Md. Rakib • made with love and passion.
               </p>
             </footer>
           </div>
