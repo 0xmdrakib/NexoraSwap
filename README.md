@@ -1,4 +1,3 @@
-[README.md](https://github.com/user-attachments/files/25821987/README.md)
 # Nexora Swap
 
 Nexora Swap is a multi-router DEX interface for fast, cleaner token swaps across major EVM chains.
@@ -72,29 +71,7 @@ npm install
 
 ### 2. Configure environment variables
 
-Create a `.env.local` file in the project root.
-
-```env
-NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=
-MORALIS_API_KEY=
-LIFI_API_KEY=
-LIFI_BASE_URL=https://li.quest
-LIFI_INTEGRATOR=swapdex-starter
-ONEINCH_API_KEY=
-ONEINCH_AUTHORIZATION=
-ONEINCH_BASE_URL=
-ALCHEMY_RPC_URL=
-ALCHEMY_RPC_URL_1=
-ALCHEMY_RPC_URL_10=
-ALCHEMY_RPC_URL_56=
-ALCHEMY_RPC_URL_137=
-ALCHEMY_RPC_URL_8453=
-ALCHEMY_RPC_URL_42161=
-ALCHEMY_RPC_URL_43114=
-THEGRAPH_API_KEY=
-UNISWAP_SUBGRAPH_ID=
-NODEREAL_PANCAKE_GRAPHQL_URL=
-```
+Create a `.env` file in the project root. then fill all env from [.env.example](./.env.example).
 
 ### 3. Run the development server
 
@@ -129,3 +106,4 @@ src/
 ## License
 
 This project is licensed under the [MIT License](./LICENSE).
+
