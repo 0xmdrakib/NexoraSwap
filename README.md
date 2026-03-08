@@ -4,6 +4,8 @@ Nexora Swap is a multi-router DEX interface for fast, cleaner token swaps across
 
 **Live app:** https://nexoraswap.online/
 
+---
+
 ## Overview
 
 Nexora Swap is built for two core flows:
@@ -61,6 +63,8 @@ The app focuses on keeping swap execution more transparent by showing route sele
 - viem
 - TanStack Query
 
+---
+
 ## Getting started
 
 ### 1. Install dependencies
@@ -94,8 +98,11 @@ src/
 └── lib/              # Chains, hooks, token helpers, wagmi config, server utilities
 ```
 
+---
+
 ## License
 
 This project is licensed under the [MIT License](./LICENSE).
+
 
 
