@@ -97,7 +97,6 @@ src/
 ├── components/       # Swap UI, token selector, chain selector, shared UI
 └── lib/              # Chains, hooks, token helpers, wagmi config, server utilities
 ```
-
 ---
 
 ## License
