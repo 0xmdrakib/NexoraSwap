@@ -85,18 +85,13 @@ npm run dev
 
 Open `http://localhost:3000` in your browser.
 
-## Project structure
+### 4. Build for production
 
-```text
-src/
-├── app/
-│   ├── api/          # Quote, token, price, metadata, and helper routes
-│   ├── layout.tsx    # App shell and metadata
-│   ├── page.tsx      # Main swap page
-│   └── providers.tsx # Wagmi, RainbowKit, React Query providers
-├── components/       # Swap UI, token selector, chain selector, shared UI
-└── lib/              # Chains, hooks, token helpers, wagmi config, server utilities
+```bash
+npm run build
+npm run start
 ```
+
 ---
 
 ## License
