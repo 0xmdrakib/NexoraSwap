@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Search, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { ChevronDown, Plus, Search, X } from 'lucide-react';
 import { useAccount, useBalance } from 'wagmi';
 import { getAddress, isAddress } from 'viem';
 
@@ -16,7 +17,7 @@ type Props = {
   token: Token | null;
   onTokenSelected: (token: Token) => void;
   showChainPicker?: boolean;
-  onChainSelected?: (chainId: number) => void;
+  onChainSelected?: (chainId: number) => void | Promise<void>;
   disabled?: boolean;
 };
 
@@ -81,7 +82,7 @@ function TokenLogo({ token, chainId, size = 28, fallback }: { token: Token; chai
     return (
       <div
         style={{ width: size, height: size }}
-        className="grid place-items-center rounded-full bg-white/10 text-[12px] font-semibold text-white/80"
+        className="token-fallback"
         aria-hidden="true"
       >
         {letter}
@@ -116,21 +117,21 @@ function TokenRow({
     <button
       type="button"
       onClick={onPick}
-      className="w-full rounded-xl px-3 py-2 text-left hover:bg-white/5 active:bg-white/10"
+      className="token-row"
     >
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           <TokenLogo token={token} chainId={chainId} />
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <div className="truncate text-sm font-semibold text-white">{token.symbol}</div>
-              <div className="truncate text-xs text-white/50">{token.name}</div>
+              <div className="token-symbol truncate">{token.symbol}</div>
+              <div className="token-name truncate">{token.name}</div>
             </div>
-            <div className="truncate text-[11px] text-white/35">{token.address}</div>
+            <div className="token-address truncate">{token.address}</div>
           </div>
         </div>
 
-        <div className="shrink-0 text-right text-sm font-semibold text-white/80">
+        <div className="token-balance">
           {balanceText}
         </div>
       </div>
@@ -158,7 +159,6 @@ export default function TokenSelect({
 
   const [walletTokens, setWalletTokens] = useState<WalletToken[]>([]);
   const [walletLoading, setWalletLoading] = useState(false);
-
   const [chainMenuOpen, setChainMenuOpen] = useState(false);
   const chainMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -187,9 +187,10 @@ export default function TokenSelect({
     setCustomAddr('');
     setCustomError(null);
     setAddingCustom(false);
+    setChainMenuOpen(false);
   }, [open]);
 
-  // Close chain menu on outside click
+  // Close only the modal's chain menu on outside click.
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
       if (!chainMenuOpen) return;
@@ -197,6 +198,7 @@ export default function TokenSelect({
       if (!el) return;
       if (!el.contains(e.target as Node)) setChainMenuOpen(false);
     }
+
     document.addEventListener('mousedown', onDocClick);
     return () => document.removeEventListener('mousedown', onDocClick);
   }, [chainMenuOpen]);
@@ -333,14 +335,14 @@ export default function TokenSelect({
 
   function getBalanceText(t: Token) {
     if (isZeroAddress(t.address)) {
-      if (nativeBalance.isLoading) return '—';
+      if (nativeBalance.isLoading) return '-';
       const v = nativeBalance.data?.value;
       const d = nativeBalance.data?.decimals ?? 18;
-      if (v === undefined || v === null) return '—';
+      if (v === undefined || v === null) return '-';
       return formatTokenAmount(v.toString(), d);
     }
     const wt = walletByAddr.get(normalizeAddr(t.address));
-    if (!wt) return '—';
+    if (!wt) return '-';
     return formatTokenAmount(wt.balance || '0', wt.decimals || 18);
   }
 
@@ -348,7 +350,7 @@ export default function TokenSelect({
     setCustomError(null);
     const addr = customAddr.trim();
     if (!addr || !addr.startsWith('0x') || addr.length !== 42) {
-      setCustomError('Please paste a valid 0x… token contract address.');
+      setCustomError('Please paste a valid 0x... token contract address.');
       return;
     }
 
@@ -373,77 +375,83 @@ export default function TokenSelect({
         onClick={() => setOpen(true)}
         disabled={disabled}
         className={[
-          // `shrink-0` prevents the button from collapsing when the amount field expands.
-          'inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white shadow-sm hover:bg-white/10',
+          'token-trigger shrink-0',
           disabled ? 'opacity-50' : '',
         ].join(' ')}
         aria-label={label ? `${label}: select token` : 'Select token'}
       >
         {token ? <TokenLogo token={token} chainId={chainId} size={20} /> : <ChainIcon chainId={chainId} size={20} />}
         <span className="max-w-[120px] truncate font-semibold">{token?.symbol || 'Select'}</span>
-        <ChevronDown className="h-4 w-4 text-white/60" />
+        <ChevronDown className="h-4 w-4 muted-icon" />
       </button>
 
       {/* Modal */}
-      {open && (
+      {open && typeof document !== 'undefined' && createPortal(
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 sm:p-8"
+          className="modal-overlay"
           onClick={() => setOpen(false)}
         >
           <div
-            className="w-full max-w-[520px] md:max-w-[560px] rounded-3xl border border-white/10 bg-black/80 p-4 shadow-2xl backdrop-blur"
+            className="token-modal"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-3">
-              <div className="text-base font-semibold text-white">Select token</div>
+              <div className="modal-title">Select token</div>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80 hover:bg-white/10"
+                className="icon-button"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            {/* Chain picker */}
+            <div className="modal-scroll-area">
+
             {showChainPicker && (
-              <div className="mt-4" ref={chainMenuRef}>
-                <div className="text-xs font-medium text-white/60">Chain</div>
+              <div className="token-chain-picker" ref={chainMenuRef}>
+                <div className="form-label">Chain</div>
                 <div className="relative mt-2">
                   <button
                     type="button"
                     onClick={() => setChainMenuOpen((v) => !v)}
-                    className="flex w-full items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white hover:bg-white/10"
+                    className="menu-trigger"
+                    aria-haspopup="menu"
+                    aria-expanded={chainMenuOpen}
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
                       <ChainIcon chainId={chainId} size={18} />
                       <span className="truncate">{currentChain?.name || `Chain ${chainId}`}</span>
                     </div>
-                    <ChevronDown className="h-4 w-4 text-white/60" />
+                    <ChevronDown className="h-4 w-4 muted-icon" />
                   </button>
 
                   {chainMenuOpen && (
-                    <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-[70] max-h-[300px] overflow-auto rounded-2xl border border-white/10 bg-black/90 p-2 shadow-2xl">
+                    <div className="floating-menu" role="menu" aria-label="Select token chain">
                       {Object.values(CHAIN_META).map((c) => {
                         const active = c.id === chainId;
                         return (
                           <button
                             key={c.id}
                             type="button"
-                            onClick={() => {
-                              setChainMenuOpen(false);
-                              onChainSelected?.(c.id);
+                            onClick={async () => {
+                              try {
+                                if (!active) await onChainSelected?.(c.id);
+                              } finally {
+                                setChainMenuOpen(false);
+                              }
                             }}
                             className={[
-                              'flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm',
-                              active ? 'bg-emerald-500/20 text-emerald-200' : 'hover:bg-white/5 text-white/90',
+                              'menu-row',
+                              active ? 'menu-row-active' : '',
                             ].join(' ')}
+                            role="menuitem"
                           >
-                            <div className="flex items-center gap-2">
+                            <div className="flex min-w-0 items-center gap-2">
                               <ChainIcon chainId={c.id} size={18} />
-                              <span>{c.name}</span>
+                              <span className="truncate">{c.name}</span>
                             </div>
-                            {active && <span className="text-[11px] text-emerald-300">Selected</span>}
+                            {active && <span className="text-[11px] font-semibold">Selected</span>}
                           </button>
                         );
                       })}
@@ -456,54 +464,55 @@ export default function TokenSelect({
             {/* Search */}
             <div className="mt-4">
               <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
+                <Search className="muted-icon pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
                 <input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search by name, symbol, or address..."
-                  className="w-full rounded-xl border border-white/10 bg-white/5 px-10 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-emerald-400/60"
+                  className="ui-input search-input"
                 />
               </div>
             </div>
 
             {/* Custom token */}
-            <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3">
-              <div className="text-xs font-medium text-white/60">Add custom token</div>
-              <div className="mt-2 flex gap-2">
+            <div className="custom-token-box">
+              <div className="form-label">Add custom token</div>
+              <div className="custom-row mt-2 flex gap-2">
                 <input
                   value={customAddr}
                   onChange={(e) => setCustomAddr(e.target.value)}
-                  placeholder="0x…"
-                  className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-emerald-400/60"
+                  placeholder="0x..."
+                  className="ui-input"
                 />
                 <button
                   type="button"
                   onClick={handleAddCustom}
                   disabled={addingCustom}
-                  className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-semibold text-black hover:bg-white/90 disabled:opacity-60"
+                  className="secondary-button disabled:opacity-60"
                 >
-                  <span className="text-lg leading-none">＋</span> Add
+                  <Plus className="h-4 w-4" aria-hidden="true" />
+                  <span>Add</span>
                 </button>
               </div>
-              {customError && <div className="mt-2 text-xs text-red-300">{customError}</div>}
-              <div className="mt-2 text-[11px] text-white/35">
-                Paste a contract address to add a custom token in selected chain.
+              {customError && <div className="custom-error mt-2 text-xs">{customError}</div>}
+              <div className="helper-text">
+                Paste a contract address to add a custom token on the selected chain.
               </div>
             </div>
 
             {/* Table header */}
-            <div className="mt-4 flex items-center justify-between px-1 text-xs text-white/50">
+            <div className="token-table-header">
               <div>Token</div>
               <div>Balance</div>
             </div>
 
-            <div className="mt-2 max-h-[420px] overflow-auto rounded-2xl border border-white/10 bg-black/30 p-2">
+            <div className="tokens-list">
               {(loading || walletLoading) && (
-                <div className="p-3 text-sm text-white/60">Loading tokens…</div>
+                <div className="list-status">Loading tokens...</div>
               )}
 
               {error && (
-                <div className="p-3 text-sm text-red-300">Failed to load token list.</div>
+                <div className="list-status list-status-danger">Failed to load token list.</div>
               )}
 
               {!loading && !walletLoading && !error && (
@@ -511,7 +520,7 @@ export default function TokenSelect({
                   {query.trim() ? (
                     <>
                       {searchResults.length === 0 ? (
-                        <div className="p-3 text-sm text-white/60">No results.</div>
+                        <div className="list-status">No results.</div>
                       ) : (
                         searchResults.map((t) => (
                           <TokenRow
@@ -529,7 +538,7 @@ export default function TokenSelect({
                     </>
                   ) : (
                     <>
-                      <div className="px-2 pb-1 pt-2 text-[11px] font-semibold text-white/40">POPULAR</div>
+                      <div className="section-label">POPULAR</div>
                       {popularTokens.map((t) => (
                         <TokenRow
                           key={`${chainId}:pop:${t.address}`}
@@ -543,9 +552,9 @@ export default function TokenSelect({
                         />
                       ))}
 
-                      <div className="mt-2 px-2 pb-1 pt-2 text-[11px] font-semibold text-white/40">IN YOUR WALLET</div>
+                      <div className="section-label">IN YOUR WALLET</div>
                       {walletTokensNonZero.length === 0 ? (
-                        <div className="p-3 text-sm text-white/60">No tokens found on this chain.</div>
+                        <div className="list-status">No tokens found on this chain.</div>
                       ) : (
                         walletTokensNonZero.map((t) => (
                           <TokenRow
@@ -561,7 +570,7 @@ export default function TokenSelect({
                         ))
                       )}
 
-                      <div className="mt-2 px-2 pb-1 pt-2 text-[11px] font-semibold text-white/40">ALL TOKENS</div>
+                      <div className="section-label">ALL TOKENS</div>
                       {remainderTokens.slice(0, 250).map((t) => (
                         <TokenRow
                           key={`${chainId}:rest:${t.address}`}
@@ -579,13 +588,10 @@ export default function TokenSelect({
                 </>
               )}
             </div>
-
-            {/* Debug note: keep it subtle */}
-            <div className="mt-3 text-[11px] text-white/35">
-              Native balance: {nativeBalance.data?.value ? formatTokenAmount(nativeBalance.data.value.toString(), nativeBalance.data.decimals ?? 18) : '—'}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
