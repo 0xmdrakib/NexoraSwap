@@ -7,9 +7,9 @@ export type Token = {
   name: string;
   decimals: number;
   logoURI?: string;
-  priceUSD?: string; // some APIs provide
+  priceUSD?: string; // DexScreener-derived USD hint for quote/minimum helpers
   coinKey?: string; // some APIs provide
-  // Optional UI enrichment (Moralis / wallet scanning)
+  // Optional UI enrichment (Alchemy wallet scanning)
   balanceRaw?: string;
   balanceFormatted?: string;
   balanceUsd?: string;
