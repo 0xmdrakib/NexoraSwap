@@ -16,7 +16,6 @@ function normalizeToken(t: any, chainId: number): Token | null {
     name: String(t.name || '').slice(0, 64),
     decimals: Number(t.decimals ?? 18),
     logoURI: t.logoURI ? String(t.logoURI) : undefined,
-    priceUSD: t.priceUSD ? String(t.priceUSD) : undefined,
     coinKey: t.coinKey ? String(t.coinKey) : undefined,
   };
 }
