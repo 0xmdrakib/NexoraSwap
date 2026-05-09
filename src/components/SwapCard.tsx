@@ -5,7 +5,6 @@ import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { usePathname } from 'next/navigation';
 import {
   useAccount,
-  useBalance,
   useChainId,
   useFeeData,
   useReadContract,
@@ -24,6 +23,8 @@ import { formatHash, formatTokenAmount, formatUSD, safeParseFloat } from '@/lib/
 import { getChainMeta } from '@/lib/chainsMeta';
 import { useDebounce } from '@/lib/hooks/useDebounce';
 import { useQuote } from '@/lib/hooks/useQuote';
+import { balanceKey, useTokenBalances } from '@/lib/hooks/useTokenBalances';
+import { tokenPriceKey, useTokenPrices } from '@/lib/hooks/useTokenPrices';
 import {
   buildSwapPairPath,
   isNativeTokenAddress,
@@ -116,17 +117,6 @@ function minNativeReserve(chainId: number): string {
 }
 
 async function loadSharedToken(chainId: number, address: Address): Promise<Token> {
-  async function loadListedToken() {
-    const res = await fetch(`/api/tokens?chainId=${chainId}`, { cache: 'no-store' });
-    const json = await res.json().catch(() => null);
-    if (!res.ok || !Array.isArray(json?.tokens)) return null;
-    return (
-      (json.tokens as Token[]).find(
-        (token) => token.address.toLowerCase() === address.toLowerCase()
-      ) || null
-    );
-  }
-
   if (isNativeTokenAddress(address)) {
     try {
       const res = await fetch(`/api/tokens?chainId=${chainId}&nativeOnly=1`, { cache: 'no-store' });
@@ -155,9 +145,6 @@ async function loadSharedToken(chainId: number, address: Address): Promise<Token
   if (res.ok && json?.token?.address) {
     return json.token as Token;
   }
-
-  const listedToken = await loadListedToken();
-  if (listedToken) return listedToken;
 
   if (!res.ok || !json?.token?.address) {
     throw new Error(json?.error || 'Token metadata could not be loaded.');
@@ -360,27 +347,45 @@ export default function SwapCard() {
 
   // Live balance for the "from" token (used to show instant "insufficient balance" UX).
   const fromIsNative = fromToken?.address === ZERO;
-  const toIsNative = toToken?.address === ZERO;
-  const { data: fromBalance } = useBalance({
-    address: address as Address | undefined,
-    chainId,
-    token: fromToken && !fromIsNative ? (fromToken.address as Address) : undefined,
-    scopeKey: `swap-balance-${balanceNonce}`,
-    query: {
-      enabled: Boolean(address && fromToken),
-      staleTime: 12_000,
-    },
-  });
+  const { prices } = useTokenPrices([fromToken, toToken], { refreshSignal: balanceNonce });
+  const { balances: selectedBalances, loading: selectedBalancesLoading } = useTokenBalances(
+    address as Address | undefined,
+    [fromToken, toToken],
+    { refreshSignal: balanceNonce }
+  );
+
+  const fromPrice = prices[tokenPriceKey(fromToken, chainId)] || 0;
+  const toPrice = prices[tokenPriceKey(toToken, toChainId)] || 0;
+  const fromBalanceRaw = fromToken ? selectedBalances[balanceKey(chainId, fromToken.address)] : undefined;
+  const toBalanceRaw = toToken ? selectedBalances[balanceKey(toChainId, toToken.address)] : undefined;
+  const fromBalanceValue = useMemo(() => {
+    if (fromBalanceRaw === undefined) return undefined;
+    try {
+      return BigInt(fromBalanceRaw);
+    } catch {
+      return 0n;
+    }
+  }, [fromBalanceRaw]);
+
+  const fromTokenForQuote = useMemo(() => {
+    if (!fromToken) return null;
+    return { ...fromToken, priceUSD: fromPrice > 0 ? String(fromPrice) : undefined };
+  }, [fromToken, fromPrice]);
+
+  const toTokenForQuote = useMemo(() => {
+    if (!toToken) return null;
+    return { ...toToken, priceUSD: toPrice > 0 ? String(toPrice) : undefined };
+  }, [toToken, toPrice]);
 
   const insufficientBalance = useMemo(() => {
-    if (!fromToken || !fromBalance) return false;
+    if (!fromToken || fromBalanceValue === undefined) return false;
     try {
       const need = BigInt(fromAmountRaw || '0');
-      return need > 0n && need > fromBalance.value;
+      return need > 0n && need > fromBalanceValue;
     } catch {
       return false;
     }
-  }, [fromToken, fromBalance, fromAmountRaw]);
+  }, [fromToken, fromBalanceValue, fromAmountRaw]);
 
   const isCrossChain = chainId !== toChainId;
 
@@ -428,20 +433,20 @@ export default function SwapCard() {
 
   const quoteReqCommon = useMemo(() => {
     if (!isConnected || !address) return null;
-    if (!fromToken || !toToken) return null;
+    if (!fromTokenForQuote || !toTokenForQuote) return null;
     if (!fromAmountRaw || fromAmountRaw === '0') return null;
 
     return {
       fromChainId: chainId,
       toChainId,
-      fromToken,
-      toToken,
+      fromToken: fromTokenForQuote,
+      toToken: toTokenForQuote,
       fromAmount: fromAmountRaw,
       fromAddress: address as Address,
       toAddress: address as Address,
       slippage,
     };
-  }, [isConnected, address, fromToken, toToken, fromAmountRaw, chainId, toChainId, slippage]);
+  }, [isConnected, address, fromTokenForQuote, toTokenForQuote, fromAmountRaw, chainId, toChainId, slippage]);
 
   const quoteReqOneInch: QuoteRequest | undefined = useMemo(() => {
     if (isCrossChain) return undefined;
@@ -505,10 +510,6 @@ export default function SwapCard() {
     loading: quoteLoading,
     minAmount,
   } = active;
-
-  // Prices (best-effort): token lists / wallet scan may include priceUSD.
-  const fromPrice = safeParseFloat(fromToken?.priceUSD);
-  const toPrice = safeParseFloat(toToken?.priceUSD);
 
   // USD under the input (instant, based on the user's typed amount).
   const fromAmountFloat = safeParseFloat(amountUI);
@@ -778,8 +779,8 @@ export default function SwapCard() {
   // Ensure we only run post-swap refresh once per confirmed tx.
   const [lastRefreshedTx, setLastRefreshedTx] = useState<string | null>(null);
 
-  // After a successful swap, refresh balances immediately (so users see the new balances right away)
-  // and ask token lists (Moralis wallet scan) to refetch in the background.
+  // After a successful swap, refresh Alchemy balances and DexScreener prices immediately.
+  // The token selector also refreshes its wallet-token list when it is open.
   useEffect(() => {
     if (!receipt || !lastTx?.hash) return;
     if (lastRefreshedTx === lastTx.hash) return;
@@ -981,10 +982,10 @@ export default function SwapCard() {
               <button
                 type="button"
                 className="pill-button"
-                disabled={!fromToken || !fromBalance}
+                disabled={!fromToken || fromBalanceValue === undefined}
                 onClick={() => {
-                  if (!fromToken || !fromBalance) return;
-                  let raw = fromBalance.value;
+                  if (!fromToken || fromBalanceValue === undefined) return;
+                  let raw = fromBalanceValue;
                   if (fromToken.address === ZERO && nativeGasBuffer > 0n) {
                     raw = raw > nativeGasBuffer ? raw - nativeGasBuffer : 0n;
                   }
@@ -999,10 +1000,10 @@ export default function SwapCard() {
 
               <BalanceLine
                 address={address as Address | undefined}
-                chainId={chainId}
                 token={fromToken}
                 priceUSD={fromPrice}
-                scopeKey={`swap-balance-${balanceNonce}`}
+                balanceRaw={fromBalanceRaw}
+                loading={selectedBalancesLoading}
               />
             </div>
           </div>
@@ -1084,10 +1085,10 @@ export default function SwapCard() {
             <span>{toUsd ? formatUSD(toUsd) : '-'}</span>
             <BalanceLine
               address={address as Address | undefined}
-              chainId={toChainId}
               token={toToken}
               priceUSD={toPrice}
-              scopeKey={`swap-balance-${balanceNonce}`}
+              balanceRaw={toBalanceRaw}
+              loading={selectedBalancesLoading}
             />
           </div>
         </div>
@@ -1350,39 +1351,26 @@ export default function SwapCard() {
 
 function BalanceLine({
   address,
-  chainId,
   token,
   priceUSD,
-  scopeKey,
+  balanceRaw,
+  loading,
 }: {
   address?: Address;
-  chainId: number;
   token: Token | null;
   priceUSD?: number;
-  scopeKey?: string;
+  balanceRaw?: string;
+  loading?: boolean;
 }) {
-  const isNative = token?.address === ZERO;
-
-  const { data: bal, isLoading } = useBalance({
-    address: address as Address | undefined,
-    chainId,
-    token: token && !isNative ? (token.address as Address) : undefined,
-    scopeKey,
-    query: {
-      enabled: Boolean(address && token),
-      staleTime: 12_000,
-    },
-  });
-
   if (!address || !token) return <span className="balance-line">Balance: -</span>;
-  if (isLoading) return <span className="balance-line">Balance: ...</span>;
+  if (loading && balanceRaw === undefined) return <span className="balance-line">Balance: ...</span>;
 
-  const amount = bal ? safeParseFloat(formatTokenAmount(bal.value.toString(), token.decimals, 6)) : 0;
+  const amount = balanceRaw ? safeParseFloat(formatTokenAmount(balanceRaw, token.decimals, 6)) : 0;
   const usd = priceUSD && priceUSD > 0 ? amount * priceUSD : 0;
 
   return (
     <span className="balance-line">
-      Balance: {bal ? formatTokenAmount(bal.value.toString(), token.decimals, 6) : '-'}
+      Balance: {balanceRaw !== undefined ? formatTokenAmount(balanceRaw, token.decimals, 6) : '-'}
       {usd > 0 ? ` (${formatUSD(usd)})` : ''}
     </span>
   );
