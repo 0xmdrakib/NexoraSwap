@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Plus, Search, X } from 'lucide-react';
-import { useAccount, useBalance } from 'wagmi';
+import { useAccount } from 'wagmi';
 import { getAddress, isAddress } from 'viem';
 
 import type { Address, Token } from '@/lib/types';
@@ -30,8 +30,6 @@ type WalletToken = {
   balanceFormatted?: string; // optional pre-formatted from API
   logo?: string | null;
   thumbnail?: string | null;
-  usdPrice?: string;
-  usdValue?: string;
 };
 
 const POPULAR_SYMBOLS = ['ETH', 'WETH', 'USDC', 'USDT', 'DAI', 'WBTC'];
@@ -158,17 +156,10 @@ export default function TokenSelect({
   const [addingCustom, setAddingCustom] = useState(false);
 
   const [walletTokens, setWalletTokens] = useState<WalletToken[]>([]);
+  const [nativeBalanceRaw, setNativeBalanceRaw] = useState<string | null>(null);
   const [walletLoading, setWalletLoading] = useState(false);
   const [chainMenuOpen, setChainMenuOpen] = useState(false);
   const chainMenuRef = useRef<HTMLDivElement | null>(null);
-
-  const nativeBalance = useBalance({
-    address,
-    chainId,
-    query: {
-      enabled: Boolean(address),
-    },
-  });
 
   // When chain changes (including while the modal is open), reset transient UI state immediately.
   // This prevents showing stale tokens/balances until refetch completes.
@@ -178,6 +169,7 @@ export default function TokenSelect({
     setCustomError(null);
     setAddingCustom(false);
     setWalletTokens([]);
+    setNativeBalanceRaw(null);
   }, [chainId]);
 
   // When the modal closes, clear the custom contract input so it feels "fresh" next time.
@@ -203,13 +195,14 @@ export default function TokenSelect({
     return () => document.removeEventListener('mousedown', onDocClick);
   }, [chainMenuOpen]);
 
-  // Fetch wallet tokens (Moralis)
+  // Fetch wallet tokens and native balance from Alchemy.
   useEffect(() => {
     let alive = true;
     async function loadWalletTokens() {
       if (!open) return;
       if (!address) {
         setWalletTokens([]);
+        setNativeBalanceRaw(null);
         return;
       }
       setWalletLoading(true);
@@ -219,9 +212,11 @@ export default function TokenSelect({
         const json = await res.json();
         if (!alive) return;
         setWalletTokens(Array.isArray(json?.tokens) ? json.tokens : []);
+        setNativeBalanceRaw(json?.nativeBalance?.balance ? String(json.nativeBalance.balance) : null);
       } catch {
         if (!alive) return;
         setWalletTokens([]);
+        setNativeBalanceRaw(null);
       } finally {
         if (alive) setWalletLoading(false);
       }
@@ -261,13 +256,9 @@ export default function TokenSelect({
 						name: wt.name,
 						decimals: wt.decimals,
 						logoURI: wt.logo || wt.thumbnail || undefined,
-						// Enrich with Moralis price/balance so the main card can show:
-						// "Balance: X (US$Y)" on both From and To.
-						priceUSD: wt.usdPrice,
 						balanceRaw: wt.balance,
 						balanceFormatted:
 							wt.balanceFormatted || formatTokenAmount(wt.balance || '0', wt.decimals || 18, 6),
-						balanceUsd: wt.usdValue,
 					}) satisfies Token,
 				];
 			});
@@ -335,15 +326,39 @@ export default function TokenSelect({
 
   function getBalanceText(t: Token) {
     if (isZeroAddress(t.address)) {
-      if (nativeBalance.isLoading) return '-';
-      const v = nativeBalance.data?.value;
-      const d = nativeBalance.data?.decimals ?? 18;
-      if (v === undefined || v === null) return '-';
-      return formatTokenAmount(v.toString(), d);
+      if (walletLoading) return '-';
+      if (!nativeBalanceRaw) return '-';
+      return formatTokenAmount(nativeBalanceRaw, 18);
     }
     const wt = walletByAddr.get(normalizeAddr(t.address));
     if (!wt) return '-';
     return formatTokenAmount(wt.balance || '0', wt.decimals || 18);
+  }
+
+  async function resolveSelectedToken(t: Token): Promise<Token> {
+    const clean = { ...t, priceUSD: undefined, balanceUsd: undefined };
+    if (isZeroAddress(t.address)) return clean;
+
+    const res = await fetch(`/api/token-metadata?chainId=${chainId}&address=${encodeURIComponent(t.address)}`, {
+      cache: 'no-store',
+    });
+    const json = await res.json().catch(() => null);
+    if (res.ok && json?.token?.address) {
+      return { ...(json.token as Token), priceUSD: undefined, balanceRaw: t.balanceRaw, balanceFormatted: t.balanceFormatted };
+    }
+
+    throw new Error(json?.error || 'Token metadata could not be loaded from Moralis.');
+  }
+
+  async function pickToken(t: Token) {
+    setCustomError(null);
+    try {
+      const selected = await resolveSelectedToken(t);
+      onTokenSelected(selected);
+      setOpen(false);
+    } catch (e: any) {
+      setCustomError(e?.message || 'Token metadata could not be loaded from Moralis.');
+    }
   }
 
   async function handleAddCustom() {
@@ -528,10 +543,7 @@ export default function TokenSelect({
                             chainId={chainId}
                             token={t}
                             balanceText={getBalanceText(t)}
-                            onPick={() => {
-                              onTokenSelected(t);
-                              setOpen(false);
-                            }}
+                            onPick={() => void pickToken(t)}
                           />
                         ))
                       )}
@@ -545,10 +557,7 @@ export default function TokenSelect({
                           chainId={chainId}
                           token={t}
                           balanceText={getBalanceText(t)}
-                          onPick={() => {
-                            onTokenSelected(t);
-                            setOpen(false);
-                          }}
+                          onPick={() => void pickToken(t)}
                         />
                       ))}
 
@@ -562,10 +571,7 @@ export default function TokenSelect({
                             chainId={chainId}
                             token={t}
                             balanceText={getBalanceText(t)}
-                            onPick={() => {
-                              onTokenSelected(t);
-                              setOpen(false);
-                            }}
+                            onPick={() => void pickToken(t)}
                           />
                         ))
                       )}
@@ -577,10 +583,7 @@ export default function TokenSelect({
                           chainId={chainId}
                           token={t}
                           balanceText={getBalanceText(t)}
-                          onPick={() => {
-                            onTokenSelected(t);
-                            setOpen(false);
-                          }}
+                          onPick={() => void pickToken(t)}
                         />
                       ))}
                     </>
