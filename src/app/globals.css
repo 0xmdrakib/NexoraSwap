@@ -483,18 +483,21 @@ input:focus-visible {
 
 .amount-input,
 .amount-output {
+  --amount-size: clamp(24px, 7vw, 34px);
   min-width: 0;
   flex: 1;
   color: var(--text-strong);
-  font-size: clamp(24px, 7vw, 34px);
+  font-size: var(--amount-size);
   font-weight: 760;
-  line-height: 1.1;
+  line-height: 1;
   overflow-wrap: anywhere;
 }
 
 .amount-input {
   display: block;
   width: 100%;
+  height: calc(var(--amount-size) + 14px);
+  min-height: calc(var(--amount-size) + 14px);
   border: 0;
   background: transparent;
   border-radius: 0;
@@ -503,9 +506,14 @@ input:focus-visible {
   -webkit-appearance: none;
   overflow: hidden;
   padding: 0;
+  line-height: calc(var(--amount-size) + 14px);
   text-overflow: clip;
   white-space: nowrap;
   caret-color: var(--accent-strong);
+}
+
+.amount-input::-webkit-scrollbar {
+  display: none;
 }
 
 .amount-input:focus,
