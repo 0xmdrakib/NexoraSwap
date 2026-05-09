@@ -36,7 +36,7 @@ function aggregatorName(router: RouterId) {
   if (r.startsWith('gaszip')) return 'gas.zip';
   if (r.startsWith('uniswap')) return 'Uniswap';
   if (r.startsWith('pancake')) return 'PancakeSwap';
-  return '—';
+  return '-';
 }
 
 function clamp(n: number, min: number, max: number) {
@@ -399,7 +399,7 @@ export default function SwapCard() {
   const minToUsd = toPrice > 0 && minToAmountFloat > 0 ? minToAmountFloat * toPrice : 0;
 
   // Cross-chain swaps can require extra native value (bridge / messaging fee).
-  // Wallets often show this as a bigger 'You send' than the typed amount — because it
+  // Wallets often show this as a bigger 'You send' than the typed amount because it
   // includes both the swap amount and the bridge/message fee inside tx.value.
   const txValueWei = useMemo(() => {
     try {
@@ -596,7 +596,7 @@ export default function SwapCard() {
     query: { enabled: Boolean(approveTx?.hash) },
   });
 
-  // Keep "Approving…" visible from the moment the tx hash exists until allowance refresh clears the flow.
+  // Keep "Approving..." visible from the moment the tx hash exists until allowance refresh clears the flow.
   const approving = approvePending || approveReceiptLoading || Boolean(approveTx?.hash);
 
   // Once the approve tx is mined, refresh allowance immediately so the UI flips to "Swap".
@@ -651,7 +651,7 @@ export default function SwapCard() {
 
 
   // Clear tx status when switching wallet network. Otherwise wagmi may look for the receipt on the new chain
-  // and the UI can incorrectly show 'Waiting for confirmation…' for an already-confirmed tx.
+  // and the UI can incorrectly show 'Waiting for confirmation...' for an already-confirmed tx.
   useEffect(() => {
     setLastTx(null);
   }, [chainId]);
@@ -684,7 +684,7 @@ export default function SwapCard() {
         chainId,
       });
 
-      // Keep the button in "Approving…" state until the tx is mined.
+      // Keep the button in "Approving..." state until the tx is mined.
       if (hash) setApproveTx({ hash, chainId });
     } catch (e: any) {
       setUiError(e?.shortMessage || e?.message || 'Approve failed');
@@ -731,8 +731,8 @@ export default function SwapCard() {
   }, [lastTx, chains]);
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 shadow-glow">
-      <div className="flex items-center justify-between gap-3">
+    <div className="swap-card">
+      <div className="swap-toolbar">
         <ChainSelect
           chainId={chainId}
           onSelect={async (id) => {
@@ -747,13 +747,14 @@ export default function SwapCard() {
             const connected = ready && account;
             return (
               <button
+                type="button"
                 className={clsx(
-                  'inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10',
-                  !connected && 'text-white/80',
+                  'control-button wallet-button',
+                  !connected && 'wallet-muted',
                 )}
                 onClick={connected ? openAccountModal : openConnectModal}
               >
-                <Wallet size={16} className="text-white/70" />
+                <Wallet size={16} className="muted-icon" />
                 {connected ? (
                   <span className="max-w-[180px] truncate">{account.displayName}</span>
                 ) : (
@@ -766,23 +767,23 @@ export default function SwapCard() {
       </div>
 
       {!process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID && (
-        <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-200">
+        <div className="warning-box mt-3">
           Missing <span className="font-mono">NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID</span>. WalletConnect-based wallets
           will not work until you set it.
         </div>
       )}
 
-      <div className="mt-4 space-y-3">
-        <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
-          <div className="mb-2 text-xs text-white/60">You pay</div>
+      <div className="swap-stack">
+        <div className="swap-asset-card">
+          <div className="asset-label">You pay</div>
           {/*
             Prevent the amount input from squeezing the token button down to a single character.
             In flex layouts, a child with `w-full` can take the whole row and force siblings to shrink.
             We instead make the input `flex-1 min-w-0` and keep the token button `shrink-0`.
           */}
-          <div className="flex items-center gap-3">
+          <div className="asset-row">
             <input
-              className="min-w-0 flex-1 bg-transparent text-2xl font-medium outline-none placeholder:text-white/30"
+              className="amount-input"
               placeholder="0.0"
               value={amountUI}
               onChange={(e) => {
@@ -795,21 +796,30 @@ export default function SwapCard() {
               label="From"
               chainId={chainId}
               token={fromToken}
-              onChainSelected={async (id) => {
-                // From-chain selection triggers wallet network switch.
-                if (!switchChainAsync) return;
-                await switchChainAsync({ chainId: id });
-              }}
               onTokenSelected={(t) => setFromToken(t)}
               showChainPicker
+              onChainSelected={async (id) => {
+                if (id === chainId) return;
+                if (!switchChainAsync) {
+                  setUiError('Wallet does not support network switching.');
+                  return;
+                }
+
+                try {
+                  setUiError(null);
+                  await switchChainAsync({ chainId: id });
+                } catch (e: any) {
+                  setUiError(e?.shortMessage || e?.message || 'Failed to switch network');
+                }
+              }}
             />
           </div>
-          <div className="mt-2 flex items-center justify-between text-xs text-white/55">
-            <span>{fromUsd ? formatUSD(fromUsd) : '—'}</span>
-            <div className="flex items-center gap-2">
+          <div className="asset-meta-row">
+            <span>{fromUsd ? formatUSD(fromUsd) : '-'}</span>
+            <div className="asset-balance-tools">
               <button
                 type="button"
-                className="rounded-full border border-white/10 bg-black/30 px-2 py-1 text-[11px] text-white/70 hover:bg-white/10 hover:text-white/90 disabled:opacity-40"
+                className="pill-button"
                 disabled={!fromToken || !fromBalance}
                 onClick={() => {
                   if (!fromToken || !fromBalance) return;
@@ -837,9 +847,10 @@ export default function SwapCard() {
           </div>
         </div>
 
-        <div className="flex justify-center">
+        <div className="switch-row">
           <button
-            className="rounded-full border border-white/10 bg-white/5 p-2 text-white/75 hover:bg-white/10"
+            type="button"
+            className="switch-button"
             onClick={async () => {
               if (!fromToken || !toToken) return;
 
@@ -881,16 +892,16 @@ export default function SwapCard() {
           </button>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
-          <div className="mb-2 text-xs text-white/60">You receive</div>
-          <div className="flex items-center gap-3">
-            <div className="min-h-[32px] min-w-0 flex-1 text-2xl font-medium">
+        <div className="swap-asset-card">
+          <div className="asset-label">You receive</div>
+          <div className="asset-row">
+            <div className="amount-output">
               {quoteLoading ? (
-                <span className="text-white/40">…</span>
+                <span className="amount-output-loading">...</span>
               ) : quote && toToken ? (
                 formatTokenAmount(quote.estimate.toAmount, toToken.decimals, 8)
               ) : (
-                <span className="text-white/30">0.0</span>
+                <span className="amount-output-placeholder">0.0</span>
               )}
             </div>
 
@@ -898,16 +909,17 @@ export default function SwapCard() {
               label="To"
               chainId={toChainId}
               token={toToken}
-              onChainSelected={(id) => {
-                setToChainId(id);
-                setToChainManual(id !== chainId);
-              }}
               onTokenSelected={(t) => setToToken(t)}
               showChainPicker
+              onChainSelected={(id) => {
+                setUiError(null);
+                setToChainManual(id !== chainId);
+                setToChainId(id);
+              }}
             />
           </div>
-          <div className="mt-2 flex items-center justify-between text-xs text-white/55">
-            <span>{toUsd ? formatUSD(toUsd) : '—'}</span>
+          <div className="asset-meta-row">
+            <span>{toUsd ? formatUSD(toUsd) : '-'}</span>
             <BalanceLine
               address={address as Address | undefined}
               chainId={toChainId}
@@ -918,14 +930,14 @@ export default function SwapCard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-xs text-white/60">Slippage</div>
+        <div className="details-grid">
+          <div className="detail-card">
+            <div className="detail-header">
+              <div className="detail-label">Slippage</div>
               <button
                 type="button"
                 onClick={() => setSlippageAuto((v) => !v)}
-                className="rounded-full border border-white/10 bg-black/30 px-2 py-1 text-[11px] text-white/70 hover:bg-white/10 hover:text-white/90"
+                className="pill-button"
                 title={slippageAuto ? 'Auto slippage is ON' : 'Auto slippage is OFF'}
               >
                 {slippageAuto ? 'Auto' : 'Manual'}
@@ -933,7 +945,7 @@ export default function SwapCard() {
             </div>
             <div className="mt-2 flex items-center gap-2">
               <input
-                className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm outline-none"
+                className="ui-input"
                 type="number"
                 min={0.01}
                 max={20}
@@ -950,18 +962,18 @@ export default function SwapCard() {
                 }}
                 inputMode="decimal"
               />
-              <span className="text-xs text-white/60">%</span>
+              <span className="detail-label">%</span>
             </div>
-            <div className="mt-1 text-[11px] text-white/45">Allowed: 0.01% – 20%</div>
+            <div className="helper-text">Allowed: 0.01% - 20%</div>
             {slippageAuto ? (
-              <div className="mt-1 text-[11px] text-white/45">
+              <div className="helper-text">
                 Auto is using {autoSlippageUI.toFixed(2).replace(/\.00$/, '')}%
               </div>
             ) : null}
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-3">
-            <div className="text-xs text-white/60">Route</div>
+          <div className="detail-card">
+            <div className="detail-label">Route</div>
             <div className="mt-2">
               <Select
                 value={router}
@@ -969,12 +981,12 @@ export default function SwapCard() {
                 options={routeOptions}
               />
             </div>
-            <div className="mt-1 text-[11px] text-white/45">
+            <div className="helper-text select-note">
               Cross-chain swaps are handled by LiFi. 1inch Direct is enabled for same-chain swaps.
               {router === 'auto' && !isCrossChain && (
-                <div className="mt-2 text-[11px] text-white/60">
+                <div className="mt-2 font-semibold" style={{ color: 'var(--muted)' }}>
                   {quoteLoading && !quote
-                    ? 'Auto is comparing routes…'
+                    ? 'Auto is comparing routes...'
                     : `Auto picked: ${effectiveRouter === 'oneinch-direct' ? '1inch Direct' : 'LiFi Smart Routing'}`}
                 </div>
               )}
@@ -983,45 +995,45 @@ export default function SwapCard() {
         </div>
 
         {quote && (
-          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-3 text-sm">
-            <div className="flex items-start justify-between gap-3">
+          <div className="quote-card">
+            <div className="quote-grid">
               <div>
-                <div className="text-xs text-white/60">Minimum received (est.)</div>
-                <div className="mt-1 font-medium">
+                <div className="quote-label">Minimum received (est.)</div>
+                <div className="quote-value">
                   {minToAmountStr && toToken
                     ? `${minToAmountStr} ${toToken.symbol}${minToUsd ? ` (${formatUSD(minToUsd)})` : ''}`
-                    : '—'}
+                    : '-'}
                 </div>
 
                 {isCrossChain && totalValueStr ? (
-                  <div className="mt-3 text-xs text-white/70">
+                  <div className="mt-3 text-xs">
                     <div className="flex items-center gap-2">
-                      <span className="text-white/55">Bridge DEX fee (est.)</span>
-                      <span className="font-medium tabular-nums text-white/80">
+                      <span className="quote-muted">Bridge DEX fee (est.)</span>
+                      <span className="font-semibold tabular-nums">
                         {bridgeFeeStr
                           ? `${bridgeFeeStr} ${nativeSymbol} (${formatUSD(bridgeFeeUsd)})`
-                          : `—`}
+                          : `-`}
                       </span>
                     </div>
                     <div className="mt-1 flex items-center gap-2">
-                      <span className="text-white/55">Wallet will send (tx value)</span>
-                      <span className="font-medium tabular-nums text-white/80">
+                      <span className="quote-muted">Wallet will send (tx value)</span>
+                      <span className="font-semibold tabular-nums">
                         {`${totalValueStr} ${nativeSymbol} (${formatUSD(totalValueUsd)})`}
                       </span>
                     </div>
                     {bridgeFeeDominates ? (
-                      <div className="mt-2 text-[11px] text-amber-200/90">
+                      <div className="mt-2 text-[11px]" style={{ color: 'var(--warning)' }}>
                         Bridge fee is higher than the swap amount. Cross-chain routes usually need a larger amount.
                       </div>
                     ) : null}
                   </div>
                 ) : null}
               </div>
-              <div className="text-right">
-                <div className="text-xs text-white/60">Aggregator</div>
-                <div className="mt-1 font-medium">{aggregatorName(quote.router)}</div>
-                <div className="mt-2 text-xs text-white/60">DEX</div>
-                <div className="mt-1 font-medium">{quote.tool || '—'}</div>
+              <div className="quote-side">
+                <div className="quote-label">Aggregator</div>
+                <div className="quote-value">{aggregatorName(quote.router)}</div>
+                <div className="quote-label mt-2">DEX</div>
+                <div className="quote-value">{quote.tool || '-'}</div>
               </div>
             </div>
 
@@ -1029,7 +1041,7 @@ export default function SwapCard() {
               <div className="mt-3 text-xs">
                 <button
                   type="button"
-                  className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-white/70 hover:text-white/90"
+                  className="advanced-button"
                   onClick={() => setAdvancedOpen((v) => !v)}
                   aria-expanded={advancedOpen}
                 >
@@ -1040,16 +1052,16 @@ export default function SwapCard() {
                 </button>
 
                 {advancedOpen ? (
-                  <div className="mt-2 rounded-xl border border-white/10 bg-black/20 p-3 text-white/70">
-                    <div className="mb-1 text-white/55">Liquidity sources</div>
+                  <div className="advanced-panel">
+                    <div className="mb-1 font-semibold">Liquidity sources</div>
                     <div className="flex flex-wrap gap-2">
                       {quote.estimate.routes.map((r) => (
                         <span
                           key={r.name}
-                          className="rounded-full border border-white/10 bg-black/30 px-2 py-1"
+                          className="route-pill"
                           title={`${r.part}%`}
                         >
-                          {r.name} • {r.part}%
+                          {r.name} - {r.part}%
                         </span>
                       ))}
                     </div>
@@ -1063,26 +1075,25 @@ export default function SwapCard() {
         {(quoteError || uiError || bigDeviation || lowLiquidity || insufficientBalance) && (
           <div
             className={clsx(
-              'rounded-2xl border p-3 text-sm',
-              lowLiquidity ? 'border-red-500/30 bg-red-500/10' : 'border-amber-500/25 bg-amber-500/10',
+              lowLiquidity ? 'danger-box' : 'warning-box',
             )}
           >
             <div className="flex items-start gap-2">
               <AlertTriangle className="mt-0.5" size={16} />
               <div className="space-y-1">
                 {insufficientBalance && (
-                  <div className="text-white/90">
+                  <div>
                     Insufficient {fromToken?.symbol || ''} balance for this amount.
                   </div>
                 )}
                 {quoteError && (
-                  <div className="text-white/90">
+                  <div>
                     {quoteReason === 'MIN_AMOUNT'
                       ? minAmount
                         ? `Amount too low. Minimum for this pair is ${minAmount.fromAmountFormatted} ${fromToken?.symbol || ''}${
-                            minAmount.fromAmountUSD ? ` (≈$${minAmount.fromAmountUSD})` : ''
+                            minAmount.fromAmountUSD ? ` (about $${minAmount.fromAmountUSD})` : ''
                           }.`
-                        : 'Amount too low for this pair. Calculating minimum…'
+                        : 'Amount too low for this pair. Calculating minimum...'
                       : quoteReason === 'NO_LIQUIDITY'
                         ? router === 'gaszip'
                           ? 'This pair is not supported on gas.zip. Try LiFi Smart Routing.'
@@ -1090,9 +1101,9 @@ export default function SwapCard() {
                         : quoteError}
                   </div>
                 )}
-                {uiError && <div className="text-white/90">{uiError}</div>}
+                {uiError && <div>{uiError}</div>}
                 {bigDeviation && (
-                  <div className="text-white/80">
+                  <div>
                     Output differs from input USD by ~{priceDeviationPct.toFixed(1)}%. Double-check token addresses and
                     liquidity.
                   </div>
@@ -1103,26 +1114,26 @@ export default function SwapCard() {
           </div>
         )}
 
-        <div className="space-y-2">
+        <div className="action-stack">
           {needsApproval && !allowanceOk && (
             <button
+              type="button"
               className={clsx(
-                'w-full rounded-2xl px-4 py-3 text-sm font-semibold',
-                approving ? 'bg-white/10 text-white/60' : 'bg-white text-black hover:bg-white/90',
+                'outline-action',
+                approving && 'opacity-70',
               )}
               onClick={onApprove}
               disabled={!isConnected || approving || !fromToken}
             >
-              {approving ? 'Approving…' : `Approve ${fromToken?.symbol || ''}`}
+              {approving ? 'Approving...' : `Approve ${fromToken?.symbol || ''}`}
             </button>
           )}
 
           <button
+            type="button"
             className={clsx(
-              'w-full rounded-2xl px-4 py-3 text-sm font-semibold',
-              swapPending || receiptLoading
-                ? 'bg-white/10 text-white/60'
-                : 'bg-emerald-400 text-black hover:bg-emerald-300',
+              'primary-action',
+              (swapPending || receiptLoading) && 'opacity-80',
             )}
             onClick={onSwap}
             disabled={
@@ -1137,15 +1148,15 @@ export default function SwapCard() {
               receiptLoading
             }
           >
-            {swapPending ? 'Confirm in wallet…' : receiptLoading ? 'Waiting for confirmation…' : 'Swap'}
+            {swapPending ? 'Confirm in wallet...' : receiptLoading ? 'Waiting for confirmation...' : 'Swap'}
           </button>
 
           {lastTx?.hash && (
-            <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-3 text-xs text-white/70">
-              <div className="flex items-center justify-between gap-3">
+            <div className="tx-card">
+              <div className="tx-row">
                 <div className="min-w-0">
-                  <div className="text-white/55">Tx hash</div>
-                  <div className="mt-1 font-mono text-[11px]">
+                  <div className="quote-muted">Tx hash</div>
+                  <div className="tx-hash">
                     {txUrl ? (
                       <a href={txUrl} target="_blank" rel="noreferrer" className="hover:underline">
                         {formatHash(lastTx.hash)}
@@ -1156,12 +1167,12 @@ export default function SwapCard() {
                   </div>
                 </div>
                 {receipt ? (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2 py-1 text-emerald-200">
+                  <span className="status-pill status-pill-success">
                     <CheckCircle2 size={14} />
                     Confirmed
                   </span>
                 ) : (
-                  <span className="rounded-full border border-white/10 bg-black/30 px-2 py-1">Pending</span>
+                  <span className="status-pill">Pending</span>
                 )}
               </div>
             </div>
@@ -1200,15 +1211,15 @@ function BalanceLine({
     },
   });
 
-  if (!address || !token) return <span>Balance: —</span>;
-  if (isLoading) return <span className="text-white/45">Balance: …</span>;
+  if (!address || !token) return <span className="balance-line">Balance: -</span>;
+  if (isLoading) return <span className="balance-line">Balance: ...</span>;
 
   const amount = bal ? safeParseFloat(formatTokenAmount(bal.value.toString(), token.decimals, 6)) : 0;
   const usd = priceUSD && priceUSD > 0 ? amount * priceUSD : 0;
 
   return (
-    <span className="text-white/45">
-      Balance: {bal ? formatTokenAmount(bal.value.toString(), token.decimals, 6) : '—'}
+    <span className="balance-line">
+      Balance: {bal ? formatTokenAmount(bal.value.toString(), token.decimals, 6) : '-'}
       {usd > 0 ? ` (${formatUSD(usd)})` : ''}
     </span>
   );
