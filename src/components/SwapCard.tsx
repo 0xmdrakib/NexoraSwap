@@ -1185,7 +1185,7 @@ export default function SwapCard() {
                       </span>
                     </div>
                     {bridgeFeeDominates ? (
-                      <div className="mt-2 text-[11px]" style={{ color: 'var(--warning)' }}>
+                      <div className="bridge-warning-text mt-2 text-[11px]">
                         Bridge fee is higher than the swap amount. Cross-chain routes usually need a larger amount.
                       </div>
                     ) : null}
