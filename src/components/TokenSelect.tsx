@@ -9,6 +9,7 @@ import { getAddress, isAddress } from 'viem';
 import type { Address, Token } from '@/lib/types';
 import { CHAIN_META } from '@/lib/chainsMeta';
 import { formatTokenAmount } from '@/lib/format';
+import { balanceKey, useTokenBalances } from '@/lib/hooks/useTokenBalances';
 import { useTokenList } from '@/lib/hooks/useTokenList';
 
 type Props = {
@@ -310,6 +311,11 @@ export default function TokenSelect({
     return merged;
   }, [popularTokens, walletTokensNonZero, tokens]);
 
+  const { balances: exactBalances } = useTokenBalances(
+    address as Address | undefined,
+    open ? popularTokens : []
+  );
+
   const searchResults = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return [];
@@ -329,6 +335,14 @@ export default function TokenSelect({
       if (walletLoading) return '-';
       if (!nativeBalanceRaw) return '-';
       return formatTokenAmount(nativeBalanceRaw, 18);
+    }
+    const exactRaw = exactBalances[balanceKey(t.chainId || chainId, t.address)];
+    if (exactRaw !== undefined) {
+      try {
+        if (BigInt(exactRaw || '0') > 0n) return formatTokenAmount(exactRaw, t.decimals || 18);
+      } catch {
+        // Fall back to wallet scan data below.
+      }
     }
     const wt = walletByAddr.get(normalizeAddr(t.address));
     if (!wt) return '-';
