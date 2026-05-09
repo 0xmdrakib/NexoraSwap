@@ -44,31 +44,31 @@ export default function ChainSelect({ chainId, onSelect }: Props) {
   }, [open]);
 
   return (
-    <div className="relative" ref={wrapRef}>
+    <div className="network-shell relative" ref={wrapRef}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10"
+        className="network-button"
         aria-haspopup="dialog"
         aria-expanded={open}
       >
         <ChainIcon src={current.logoUrl} alt={current.name} />
-        <span className="font-medium">{current.name}</span>
-        <ChevronDown className="h-4 w-4 opacity-70" />
+        <span className="truncate">{current.name}</span>
+        <ChevronDown className="h-4 w-4 muted-icon" />
       </button>
 
       {open && (
         <div
           role="dialog"
           aria-label="Switch Networks"
-          className="absolute left-0 top-11 z-50 w-[260px] rounded-2xl border border-white/10 bg-[#0b0e13]/95 p-2 shadow-2xl backdrop-blur"
+          className="chain-dropdown"
         >
           <div className="flex items-center justify-between px-2 py-2">
-            <div className="text-sm font-semibold">Switch Networks</div>
+            <div className="modal-title text-sm">Switch Networks</div>
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="rounded-lg border border-white/10 bg-white/5 p-1 hover:bg-white/10"
+              className="icon-button !h-8 !w-8"
               aria-label="Close"
             >
               <X className="h-4 w-4" />
@@ -90,8 +90,8 @@ export default function ChainSelect({ chainId, onSelect }: Props) {
                     }
                   }}
                   className={clsx(
-                    'flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition',
-                    active ? 'bg-emerald-400/90 text-black' : 'hover:bg-white/10'
+                    'menu-row',
+                    active && 'menu-row-active',
                   )}
                 >
                   <span className="flex items-center gap-2">
@@ -101,7 +101,7 @@ export default function ChainSelect({ chainId, onSelect }: Props) {
                   {active ? (
                     <span className="flex items-center gap-2">
                       <span className="text-xs font-semibold">Connected</span>
-                      <span className="h-2 w-2 rounded-full bg-emerald-600" />
+                      <span className="status-dot !h-2 !w-2" />
                     </span>
                   ) : null}
                 </button>
