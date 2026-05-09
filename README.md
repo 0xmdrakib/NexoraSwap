@@ -21,7 +21,7 @@ The app focuses on keeping swap execution more transparent by showing route sele
 - Same-chain route comparison in **Auto (best)** mode
 - Cross-chain swaps across supported EVM networks
 - Token selector and chain selector for both swap sides
-- Wallet token balances and USD values in the token picker
+- Wallet token balances in the token picker, plus DexScreener USD estimates for selected swap tokens
 - Custom token import by contract address
 - Minimum received estimate shown before swap confirmation
 - Bridge fee estimate and `tx value` visibility for cross-chain swaps
@@ -62,6 +62,7 @@ The app focuses on keeping swap execution more transparent by showing route sele
 - RainbowKit
 - viem
 - TanStack Query
+- Neon Postgres cache for token metadata and price lookups
 
 ---
 
