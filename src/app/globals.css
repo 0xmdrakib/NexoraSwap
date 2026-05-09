@@ -493,8 +493,25 @@ input:focus-visible {
 }
 
 .amount-input {
+  display: block;
+  width: 100%;
   border: 0;
   background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  appearance: none;
+  -webkit-appearance: none;
+  overflow: hidden;
+  padding: 0;
+  text-overflow: clip;
+  white-space: nowrap;
+  caret-color: var(--accent-strong);
+}
+
+.amount-input:focus,
+.amount-input:focus-visible {
+  box-shadow: none;
+  outline: none;
 }
 
 .amount-input::placeholder {
@@ -652,6 +669,16 @@ input:focus-visible {
 
 .quote-muted {
   color: var(--muted);
+}
+
+.bridge-warning-text {
+  color: #f5ca64;
+  font-weight: 720;
+  line-height: 1.45;
+}
+
+:root[data-theme='night'] .bridge-warning-text {
+  color: #ffd978;
 }
 
 .quote-side {
