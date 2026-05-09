@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { usePathname } from 'next/navigation';
 import {
   useAccount,
   useBalance,
@@ -23,6 +24,13 @@ import { formatHash, formatTokenAmount, formatUSD, safeParseFloat } from '@/lib/
 import { getChainMeta } from '@/lib/chainsMeta';
 import { useDebounce } from '@/lib/hooks/useDebounce';
 import { useQuote } from '@/lib/hooks/useQuote';
+import {
+  buildSwapPairPath,
+  isNativeTokenAddress,
+  NATIVE_TOKEN_ADDRESS,
+  parseSwapPairPath,
+  type SwapPairUrl,
+} from '@/lib/swapUrl';
 import TokenSelect from './TokenSelect';
 import ChainSelect from './ChainSelect';
 import { Select } from './ui/Select';
@@ -107,14 +115,74 @@ function minNativeReserve(chainId: number): string {
   }
 }
 
+async function loadSharedToken(chainId: number, address: Address): Promise<Token> {
+  async function loadListedToken() {
+    const res = await fetch(`/api/tokens?chainId=${chainId}`, { cache: 'no-store' });
+    const json = await res.json().catch(() => null);
+    if (!res.ok || !Array.isArray(json?.tokens)) return null;
+    return (
+      (json.tokens as Token[]).find(
+        (token) => token.address.toLowerCase() === address.toLowerCase()
+      ) || null
+    );
+  }
+
+  if (isNativeTokenAddress(address)) {
+    try {
+      const res = await fetch(`/api/tokens?chainId=${chainId}&nativeOnly=1`, { cache: 'no-store' });
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.token?.address) return json.token as Token;
+    } catch {
+      // Use the local chain metadata fallback below.
+    }
+
+    const meta = getChainMeta(chainId);
+    return {
+      chainId,
+      address: NATIVE_TOKEN_ADDRESS,
+      symbol: meta.nativeSymbol,
+      name: meta.nativeSymbol,
+      decimals: 18,
+      logoURI: meta.logoUrl,
+    };
+  }
+
+  const res = await fetch(
+    `/api/token-metadata?chainId=${chainId}&address=${encodeURIComponent(address)}`,
+    { cache: 'no-store' }
+  );
+  const json = await res.json().catch(() => null);
+  if (res.ok && json?.token?.address) {
+    return json.token as Token;
+  }
+
+  const listedToken = await loadListedToken();
+  if (listedToken) return listedToken;
+
+  if (!res.ok || !json?.token?.address) {
+    throw new Error(json?.error || 'Token metadata could not be loaded.');
+  }
+  return json.token as Token;
+}
+
+function replaceBrowserPath(path: string) {
+  if (typeof window === 'undefined') return;
+  if (window.location.pathname === path) return;
+  window.history.replaceState(null, '', path);
+}
+
 export default function SwapCard() {
+  const pathname = usePathname();
   const { address, isConnected } = useAccount();
-  const chainId = useChainId();
+  const walletChainId = useChainId();
   const { chains, switchChainAsync } = useSwitchChain();
 
+  const [fromChainId, setFromChainId] = useState<number>(walletChainId);
+  const [fromChainManual, setFromChainManual] = useState(false);
   const [fromToken, setFromToken] = useState<Token | null>(null);
+  const chainId = fromChainId;
 
-  const [toChainId, setToChainId] = useState<number>(chainId);
+  const [toChainId, setToChainId] = useState<number>(walletChainId);
   const [toChainManual, setToChainManual] = useState(false);
   const [toToken, setToToken] = useState<Token | null>(null);
 
@@ -130,28 +198,29 @@ export default function SwapCard() {
 
   const [router, setRouter] = useState<RouterId>('auto');
 
-  // Used to stage cross-chain "swap sides" so we can switch the wallet network and keep tokens intact.
+  // Used when chain changes are expected to preserve URL-hydrated or swapped tokens.
   const suppressTokenResetOnChainChange = useRef(false);
   const suppressToTokenResetOnToChainChange = useRef(false);
-  const pendingFlip = useRef<
-    | null
-    | {
-        targetChainId: number;
-        newToChainId: number;
-        newFromToken: Token | null;
-        newToToken: Token | null;
-      }
-  >(null);
+  const hydratedPairPath = useRef<string | null>(null);
 
   // Used to force fresh balance reads right after a confirmed swap.
   const [balanceNonce, setBalanceNonce] = useState(0);
+  const [shareHydrating, setShareHydrating] = useState(false);
+  const [shareHydrationError, setShareHydrationError] = useState<string | null>(null);
+
+  const sharedPairFromPath = useMemo(() => parseSwapPairPath(pathname), [pathname]);
+
+  useEffect(() => {
+    if (fromChainManual) return;
+    setFromChainId(walletChainId);
+  }, [walletChainId, fromChainManual]);
 
   // Keep destination chain synced by default, but let the user override.
   useEffect(() => {
     if (!toChainManual) setToChainId(chainId);
   }, [chainId, toChainManual]);
 
-  // When wallet chain changes, reset tokens to avoid mismatches.
+  // When the selected source chain changes, reset tokens to avoid mismatches.
   useEffect(() => {
     if (suppressTokenResetOnChainChange.current) {
       suppressTokenResetOnChainChange.current = false;
@@ -172,20 +241,105 @@ export default function SwapCard() {
     setLastTx(null);
   }, [toChainId]);
 
-  // If we initiated a cross-chain side-swap, apply the staged tokens/chains once the wallet is on the new source chain.
   useEffect(() => {
-    const p = pendingFlip.current;
-    if (!p) return;
-    if (chainId !== p.targetChainId) return;
+    let cancelled = false;
 
-    suppressToTokenResetOnToChainChange.current = true;
-    setToChainId(p.newToChainId);
-    setToChainManual(true);
-    setFromToken(p.newFromToken);
-    setToToken(p.newToToken);
-    setLastTx(null);
-    pendingFlip.current = null;
-  }, [chainId]);
+    async function hydrateSharedPair(pair: SwapPairUrl) {
+      setShareHydrating(true);
+      setShareHydrationError(null);
+
+      try {
+        const [from, to] = await Promise.all([
+          loadSharedToken(pair.fromChainId, pair.fromTokenAddress),
+          loadSharedToken(pair.toChainId, pair.toTokenAddress),
+        ]);
+        if (cancelled) return;
+
+        suppressTokenResetOnChainChange.current = true;
+        suppressToTokenResetOnToChainChange.current = true;
+        setFromChainManual(true);
+        setToChainManual(pair.toChainId !== pair.fromChainId);
+        setFromChainId(pair.fromChainId);
+        setToChainId(pair.toChainId);
+        setFromToken({ ...from, chainId: pair.fromChainId });
+        setToToken({ ...to, chainId: pair.toChainId });
+        setLastTx(null);
+        hydratedPairPath.current = pathname;
+      } catch (e: any) {
+        if (cancelled) return;
+        setShareHydrationError(e?.message || 'Shared pair link could not be loaded.');
+        setFromToken(null);
+        setToToken(null);
+        setFromChainManual(false);
+        setToChainManual(false);
+        setFromChainId(walletChainId);
+        setToChainId(walletChainId);
+        hydratedPairPath.current = pathname;
+        replaceBrowserPath('/');
+      } finally {
+        if (!cancelled) setShareHydrating(false);
+      }
+    }
+
+    if (sharedPairFromPath.kind === 'none') {
+      hydratedPairPath.current = null;
+      setShareHydrationError(null);
+      setShareHydrating(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (hydratedPairPath.current === pathname) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (sharedPairFromPath.kind === 'invalid') {
+      setShareHydrating(false);
+      setShareHydrationError(sharedPairFromPath.reason);
+      setFromToken(null);
+      setToToken(null);
+      setFromChainManual(false);
+      setToChainManual(false);
+      setFromChainId(walletChainId);
+      setToChainId(walletChainId);
+      hydratedPairPath.current = pathname;
+      replaceBrowserPath('/');
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    hydrateSharedPair(sharedPairFromPath);
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname, sharedPairFromPath, walletChainId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (shareHydrating) return;
+    if (sharedPairFromPath.kind !== 'none' && hydratedPairPath.current !== pathname) return;
+
+    if (fromToken && toToken) {
+      const nextPath = buildSwapPairPath({
+        fromChainId: chainId,
+        fromTokenAddress: fromToken.address,
+        toChainId,
+        toTokenAddress: toToken.address,
+      });
+      hydratedPairPath.current = nextPath;
+      replaceBrowserPath(nextPath);
+      return;
+    }
+
+    if (window.location.pathname.startsWith('/swap')) {
+      hydratedPairPath.current = null;
+      replaceBrowserPath('/');
+    }
+  }, [chainId, fromToken, pathname, shareHydrating, sharedPairFromPath.kind, toChainId, toToken]);
 
   const fromAmountRaw = useMemo(() => {
     if (!fromToken) return '0';
@@ -644,8 +798,8 @@ export default function SwapCard() {
 
   // Clear transient UI errors (e.g., "User rejected the request") as soon as the user changes inputs.
   useEffect(() => {
-    if (!uiError) return;
-    setUiError(null);
+    if (uiError) setUiError(null);
+    if (shareHydrationError) setShareHydrationError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fromAmountRaw, chainId, toChainId, fromToken?.address, toToken?.address, router]);
 
@@ -654,12 +808,13 @@ export default function SwapCard() {
   // and the UI can incorrectly show 'Waiting for confirmation...' for an already-confirmed tx.
   useEffect(() => {
     setLastTx(null);
-  }, [chainId]);
+  }, [walletChainId]);
 
   async function ensureCorrectChain() {
     if (!switchChainAsync) return;
-    if (chainId !== fromToken?.chainId) {
-      await switchChainAsync({ chainId: fromToken?.chainId || chainId });
+    const targetChainId = fromToken?.chainId || chainId;
+    if (walletChainId !== targetChainId) {
+      await switchChainAsync({ chainId: targetChainId });
     }
   }
 
@@ -681,11 +836,11 @@ export default function SwapCard() {
         functionName: 'approve',
         // Safer UX: approve only the exact amount entered (not unlimited).
         args: [spender, approveAmount],
-        chainId,
+        chainId: fromToken.chainId || chainId,
       });
 
       // Keep the button in "Approving..." state until the tx is mined.
-      if (hash) setApproveTx({ hash, chainId });
+      if (hash) setApproveTx({ hash, chainId: fromToken.chainId || chainId });
     } catch (e: any) {
       setUiError(e?.shortMessage || e?.message || 'Approve failed');
     }
@@ -722,6 +877,28 @@ export default function SwapCard() {
     }
   }
 
+  async function selectSourceChain(id: number) {
+    if (id === chainId) return;
+
+    setUiError(null);
+    setShareHydrationError(null);
+    setFromChainManual(true);
+    setFromChainId(id);
+    setLastTx(null);
+
+    if (!isConnected) return;
+    if (!switchChainAsync) {
+      setUiError('Wallet does not support network switching.');
+      return;
+    }
+
+    try {
+      await switchChainAsync({ chainId: id });
+    } catch (e: any) {
+      setUiError(e?.shortMessage || e?.message || 'Failed to switch network');
+    }
+  }
+
   const txUrl = useMemo(() => {
     if (!lastTx?.hash) return null;
     const c = chains.find((x) => x.id === lastTx.chainId);
@@ -735,10 +912,7 @@ export default function SwapCard() {
       <div className="swap-toolbar">
         <ChainSelect
           chainId={chainId}
-          onSelect={async (id) => {
-            if (!switchChainAsync) return;
-            await switchChainAsync({ chainId: id });
-          }}
+          onSelect={selectSourceChain}
         />
 
         <ConnectButton.Custom>
@@ -798,20 +972,7 @@ export default function SwapCard() {
               token={fromToken}
               onTokenSelected={(t) => setFromToken(t)}
               showChainPicker
-              onChainSelected={async (id) => {
-                if (id === chainId) return;
-                if (!switchChainAsync) {
-                  setUiError('Wallet does not support network switching.');
-                  return;
-                }
-
-                try {
-                  setUiError(null);
-                  await switchChainAsync({ chainId: id });
-                } catch (e: any) {
-                  setUiError(e?.shortMessage || e?.message || 'Failed to switch network');
-                }
-              }}
+              onChainSelected={selectSourceChain}
             />
           </div>
           <div className="asset-meta-row">
@@ -863,26 +1024,27 @@ export default function SwapCard() {
               }
 
               // Cross-chain: swap tokens AND swap source/destination chains.
-              // Requires switching the wallet network to the previous destination chain.
+              const nextFromChainId = toChainId;
+              const nextToChainId = chainId;
+              suppressTokenResetOnChainChange.current = true;
+              suppressToTokenResetOnToChainChange.current = true;
+              setFromChainManual(true);
+              setToChainManual(true);
+              setFromChainId(nextFromChainId);
+              setToChainId(nextToChainId);
+              setFromToken(toToken);
+              setToToken(fromToken);
+              setLastTx(null);
+
+              if (!isConnected) return;
               if (!switchChainAsync) {
                 setUiError('Wallet does not support network switching.');
                 return;
               }
 
               try {
-                suppressTokenResetOnChainChange.current = true;
-                pendingFlip.current = {
-                  targetChainId: toChainId,
-                  newToChainId: chainId,
-                  newFromToken: toToken,
-                  newToToken: fromToken,
-                };
-                setToChainManual(true);
-                await switchChainAsync({ chainId: toChainId });
+                await switchChainAsync({ chainId: nextFromChainId });
               } catch (e: any) {
-                // If the user rejects the chain switch, clean up.
-                pendingFlip.current = null;
-                suppressTokenResetOnChainChange.current = false;
                 setUiError(e?.shortMessage || e?.message || 'Failed to switch network');
               }
             }}
@@ -1072,7 +1234,7 @@ export default function SwapCard() {
           </div>
         )}
 
-        {(quoteError || uiError || bigDeviation || lowLiquidity || insufficientBalance) && (
+        {(quoteError || uiError || shareHydrationError || bigDeviation || lowLiquidity || insufficientBalance) && (
           <div
             className={clsx(
               lowLiquidity ? 'danger-box' : 'warning-box',
@@ -1102,6 +1264,7 @@ export default function SwapCard() {
                   </div>
                 )}
                 {uiError && <div>{uiError}</div>}
+                {shareHydrationError && <div>{shareHydrationError}</div>}
                 {bigDeviation && (
                   <div>
                     Output differs from input USD by ~{priceDeviationPct.toFixed(1)}%. Double-check token addresses and
