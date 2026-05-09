@@ -35,17 +35,16 @@ export function Select({
     <RadixSelect.Root value={value} onValueChange={onChange} disabled={disabled}>
       <RadixSelect.Trigger
         className={clsx(
-          'inline-flex w-full items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm',
-          'text-white hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/15',
+          'ui-select-trigger',
           'disabled:cursor-not-allowed disabled:opacity-60',
           className,
         )}
         aria-label="Select"
       >
-        <RadixSelect.Value placeholder={placeholder || 'Select…'}>
+        <RadixSelect.Value placeholder={placeholder || 'Select...'}>
           <span className="truncate">{selectedLabel}</span>
         </RadixSelect.Value>
-        <RadixSelect.Icon className="text-white/60">
+        <RadixSelect.Icon className="muted-icon">
           <ChevronDown size={16} />
         </RadixSelect.Icon>
       </RadixSelect.Trigger>
@@ -54,12 +53,9 @@ export function Select({
         <RadixSelect.Content
           position="popper"
           sideOffset={8}
-          className={clsx(
-            'z-[9999] overflow-hidden rounded-2xl border border-white/10 bg-[#0b0e14] shadow-glow',
-            'min-w-[var(--radix-select-trigger-width)]',
-          )}
+          className="ui-select-content"
         >
-          <RadixSelect.ScrollUpButton className="grid place-items-center py-1 text-white/70">
+          <RadixSelect.ScrollUpButton className="ui-select-scroll">
             <ChevronUp size={16} />
           </RadixSelect.ScrollUpButton>
 
@@ -69,21 +65,17 @@ export function Select({
                 key={opt.value}
                 value={opt.value}
                 disabled={opt.disabled}
-                className={clsx(
-                  'relative flex select-none items-center rounded-xl px-3 py-2 text-sm outline-none',
-                  'text-white/90 data-[highlighted]:bg-white/10',
-                  'data-[disabled]:pointer-events-none data-[disabled]:opacity-40',
-                )}
+                className="ui-select-item"
               >
                 <RadixSelect.ItemText>{opt.label}</RadixSelect.ItemText>
-                <RadixSelect.ItemIndicator className="absolute right-2 inline-flex items-center justify-center text-white/80">
+                <RadixSelect.ItemIndicator className="absolute right-2 inline-flex items-center justify-center">
                   <Check size={16} />
                 </RadixSelect.ItemIndicator>
               </RadixSelect.Item>
             ))}
           </RadixSelect.Viewport>
 
-          <RadixSelect.ScrollDownButton className="grid place-items-center py-1 text-white/70">
+          <RadixSelect.ScrollDownButton className="ui-select-scroll">
             <ChevronDown size={16} />
           </RadixSelect.ScrollDownButton>
         </RadixSelect.Content>
