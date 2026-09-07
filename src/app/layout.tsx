@@ -16,10 +16,11 @@ export const metadata: Metadata = {
     type: 'website',
     images: [
       {
-        url: '/nexora-swap-thumbnail.jpg',
-        width: 1910,
-        height: 1000,
-        alt: 'Nexora Swap — multi-router DEX',
+        url: '/nexora-swap-embed-light-v2.jpg',
+        width: 1200,
+        height: 630,
+        type: 'image/jpeg',
+        alt: 'Nexora Swap — multi-router DEX for EVM networks and Solana',
       },
     ],
   },
@@ -28,7 +29,12 @@ export const metadata: Metadata = {
     title: 'Nexora Swap',
     description:
       'A fast, simple multi-router DEX for swapping tokens across EVM networks and Solana.',
-    images: ['/nexora-swap-thumbnail.jpg'],
+    images: [
+      {
+        url: '/nexora-swap-embed-light-v2.jpg',
+        alt: 'Nexora Swap — multi-router DEX for EVM networks and Solana',
+      },
+    ],
   },
   other: {
     'base:app_id': '6a5493c540f72197db8683c5',
