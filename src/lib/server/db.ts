@@ -22,10 +22,10 @@ export function getSqlClient(): SqlClient | null {
   return sqlClient;
 }
 
-async function createSchema(sql: SqlClient) {
+export async function createSchema(sql: SqlClient) {
   await sql`
     CREATE TABLE IF NOT EXISTS token_metadata (
-      chain_id integer NOT NULL,
+      chain_id bigint NOT NULL,
       address text NOT NULL,
       name text NOT NULL,
       symbol text NOT NULL,
@@ -42,7 +42,7 @@ async function createSchema(sql: SqlClient) {
 
   await sql`
     CREATE TABLE IF NOT EXISTS token_price_cache (
-      chain_id integer NOT NULL,
+      chain_id bigint NOT NULL,
       address text NOT NULL,
       price_usd text NOT NULL,
       pair_address text,
@@ -51,6 +51,29 @@ async function createSchema(sql: SqlClient) {
       fetched_at timestamptz NOT NULL DEFAULT now(),
       PRIMARY KEY (chain_id, address)
     )
+  `;
+
+  // LI.FI's Solana chain ID exceeds PostgreSQL's 32-bit integer range.
+  // Widen existing caches in place; fresh databases already use bigint.
+  await sql`
+    DO $$
+    BEGIN
+      SET LOCAL lock_timeout = '3s';
+      IF EXISTS (
+        SELECT 1 FROM pg_attribute
+        WHERE attrelid = 'token_metadata'::regclass
+          AND attname = 'chain_id' AND atttypid = 'integer'::regtype
+      ) THEN
+        ALTER TABLE token_metadata ALTER COLUMN chain_id TYPE bigint;
+      END IF;
+      IF EXISTS (
+        SELECT 1 FROM pg_attribute
+        WHERE attrelid = 'token_price_cache'::regclass
+          AND attname = 'chain_id' AND atttypid = 'integer'::regtype
+      ) THEN
+        ALTER TABLE token_price_cache ALTER COLUMN chain_id TYPE bigint;
+      END IF;
+    END; $$
   `;
 
   await sql`

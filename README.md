@@ -71,6 +71,8 @@ Solana continues to use LI.FI and its existing RPC balance service. Token logos 
 
 Run `npm test` for metadata and fallback regression coverage, then `npm run build` for the production build.
 
+The cache uses PostgreSQL `bigint` chain IDs so Solana fits alongside EVM networks. On first use, older integer columns are widened in place while retaining existing records and keys. To include the real PostgreSQL migration test, set `NEXORA_TEST_POSTGRES_CONTAINER` to a disposable PostgreSQL container name before running `npm test`.
+
 ## Tech stack
 
 - Next.js 14
