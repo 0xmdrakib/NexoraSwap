@@ -16,6 +16,6 @@ export async function GET(req: NextRequest) {
     const [price] = await getTokenPrices([{ chainId, address: tokenAddress as `0x${string}` }], { force });
     return NextResponse.json(price || { chainId, address: tokenAddress, priceUSD: null, source: 'none' });
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Failed to fetch DexScreener price' }, { status: 502 });
+    return NextResponse.json({ error: e?.message || 'Failed to fetch token price' }, { status: 502 });
   }
 }

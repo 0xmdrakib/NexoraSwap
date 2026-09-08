@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "test": "tsx --test tests/*.test.ts",
+    "audit:prices": "tsx scripts/audit-prices.ts",
     "format": "prettier --write ."
   },
   "dependencies": {

@@ -8,7 +8,7 @@ export type Token = {
   name: string;
   decimals: number;
   logoURI?: string;
-  priceUSD?: string; // DexScreener-derived USD hint for quote/minimum helpers
+  priceUSD?: string; // Server-resolved USD estimate for quote/minimum helpers
   coinKey?: string; // some APIs provide
   // Optional UI enrichment (Alchemy wallet scanning)
   balanceRaw?: string;

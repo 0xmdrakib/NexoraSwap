@@ -909,7 +909,7 @@ export default function SwapCard() {
   // Ensure we only run post-swap refresh once per confirmed tx.
   const [lastRefreshedTx, setLastRefreshedTx] = useState<string | null>(null);
 
-  // After a successful swap, refresh Alchemy balances and DexScreener prices immediately.
+  // After a successful swap, refresh wallet balances and token prices immediately.
   // The token selector also refreshes its wallet-token list when it is open.
   useEffect(() => {
     if (!receiptConfirmed || !lastTx?.hash) return;

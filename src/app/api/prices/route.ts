@@ -25,6 +25,6 @@ export async function POST(req: NextRequest) {
     const prices = await getTokenPrices(normalized, { force });
     return NextResponse.json({ prices });
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Failed to fetch DexScreener prices' }, { status: 502 });
+    return NextResponse.json({ error: e?.message || 'Failed to fetch token prices' }, { status: 502 });
   }
 }

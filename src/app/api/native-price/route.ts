@@ -18,12 +18,12 @@ export async function GET(req: Request) {
     const usd = Number(price?.priceUSD || 0);
     if (!Number.isFinite(usd) || usd <= 0) {
       return NextResponse.json(
-        { ok: false, error: 'Could not fetch native price from DexScreener' },
+        { ok: false, error: 'Could not fetch the native token price' },
         { status: 502 }
       );
     }
-    return NextResponse.json({ ok: true, usd, source: price?.source || 'dexscreener', cached: price?.cached || false });
+    return NextResponse.json({ ok: true, usd, source: price?.source || 'none', cached: price?.cached || false });
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message || 'Could not fetch native price' }, { status: 502 });
+    return NextResponse.json({ ok: false, error: e?.message || 'Could not fetch the native token price' }, { status: 502 });
   }
 }

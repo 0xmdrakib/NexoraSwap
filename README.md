@@ -24,7 +24,7 @@ The app focuses on keeping swap execution more transparent by showing route sele
 - Solana wallet support via Wallet Standard and injected wallets such as Phantom, MetaMask, Bitget, Solflare, and Backpack
 - EVM wallets via MetaMask/WalletConnect, with Solana and EVM wallets handled separately in the UI
 - Token selector and chain selector for both swap sides
-- Wallet token balances in the token picker, plus DexScreener USD estimates for selected swap tokens
+- Wallet token balances in the token picker, plus LI.FI USD estimates with a DexScreener fallback
 - Custom token import by contract address
 - Minimum received estimate shown before swap confirmation
 - Bridge fee estimate and `tx value` visibility for cross-chain swaps
@@ -67,11 +67,19 @@ Token selection, custom imports, shared swap links and wallet token lists use th
 4. For EVM tokens missing from both sources, the configured Alchemy RPC reads the contract's name, symbol and decimals. The RPC chain is checked before accepting the result.
 5. If providers are unavailable, existing stale database metadata can still be used. Unknown tokens return an actionable error without guessing decimals.
 
-Solana continues to use LI.FI and its existing RPC balance service. Token logos are optional; cached artwork is retained when a provider cannot supply it. Existing cache records do not need to be deleted or recreated. Token prices continue to come from DexScreener, and swap routing is unchanged.
+Solana continues to use LI.FI and its existing RPC balance service. Token logos are optional; cached artwork is retained when a provider cannot supply it. Existing cache records do not need to be deleted or recreated. Swap routing is unchanged.
 
 Run `npm test` for metadata and fallback regression coverage, then `npm run build` for the production build.
 
 The cache uses PostgreSQL `bigint` chain IDs so Solana fits alongside EVM networks. On first use, older integer columns are widened in place while retaining existing records and keys. To include the real PostgreSQL migration test, set `NEXORA_TEST_POSTGRES_CONTAINER` to a disposable PostgreSQL container name before running `npm test`.
+
+## USD price estimates
+
+The single-token, batch and native-token price endpoints share a resolver: fresh cache, then LI.FI, then DexScreener when LI.FI has no valid price or is unavailable. LI.FI results must match the requested chain and address. Stablecoin prices are never forced to $1.
+
+DexScreener fallback prices come from its broader token-pool list, with an alternate pool-list endpoint for availability. The batch token endpoint can expose an unrepresentative pool and is not used for price selection. Pools must match the chain and token, have positive reported liquidity and yield a finite positive USD price. The deepest eligible pool wins regardless of whether the token is the base or quote asset; quote-side prices are converted using the pool ratio. Solana address matching preserves case. These are market estimates, and a thin or distorted pool can still be unreliable; unavailable prices are returned as unknown.
+
+Run `npm run audit:prices` for a live comparison of LI.FI-listed USDT/USDT0, USDC, DAI, bridged `.e` variants and native tokens across supported networks. It writes JSON and Markdown reports under `output/verification` and flags unavailable prices or differences above 5% for review. This is a repeatable sample, not continuous monitoring or coverage of every custom token.
 
 ## Tech stack
 

@@ -52,7 +52,7 @@ beforeEach(() => {
   dbUnavailable = false;
   (globalThis as typeof globalThis & { __nexoraCache: Map<string, unknown> }).__nexoraCache.clear();
   for (const key of Object.keys(process.env)) {
-    if (/^(DATABASE_URL|LIFI_|ONEINCH_|ALCHEMY_|MORALIS_)/.test(key)) delete process.env[key];
+    if (/^(DATABASE_URL|LIFI_|ONEINCH_|ALCHEMY_)/.test(key)) delete process.env[key];
   }
   Object.assign(process.env, {
     DATABASE_URL: 'postgresql://test:test@database.example.test/test',

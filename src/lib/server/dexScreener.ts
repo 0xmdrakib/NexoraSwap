@@ -5,9 +5,12 @@ import { addressCacheKey, normalizeSolanaAddress, normalizeTokenAddressForChain 
 import type { TokenAddress } from '@/lib/types';
 import { cacheGet, cacheSet } from '@/lib/server/cache';
 import { getCacheSql, isDatabaseConfigured } from '@/lib/server/db';
+import { getLifiTokenPrice } from '@/lib/server/lifiPrices';
 
 const PRICE_TTL_MS = 30_000;
 const FORCE_MIN_TTL_MS = 10_000;
+const PROVIDER_TIMEOUT_MS = 4000;
+const pendingPools = new Map<string, Promise<DexPair[]>>();
 
 type PriceCacheRow = {
   chain_id: number;
@@ -34,7 +37,7 @@ export type TokenPrice = {
   chainId: number;
   address: TokenAddress;
   priceUSD: string | null;
-  source: 'dexscreener' | 'neon' | 'memory' | 'none';
+  source: 'lifi' | 'dexscreener' | 'neon' | 'memory' | 'none';
   pairAddress?: string;
   dexId?: string;
   liquidityUsd?: string;
@@ -134,10 +137,10 @@ function pairLiquidity(pair: DexPair) {
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
-function priceForRequestedToken(pair: DexPair, requestedAddress: string) {
-  const requested = requestedAddress.toLowerCase();
-  const base = String(pair.baseToken?.address || '').toLowerCase();
-  const quote = String(pair.quoteToken?.address || '').toLowerCase();
+function priceForRequestedToken(pair: DexPair, chainId: number, requestedAddress: string) {
+  const requested = addressCacheKey(chainId, requestedAddress);
+  const base = addressCacheKey(chainId, String(pair.baseToken?.address || ''));
+  const quote = addressCacheKey(chainId, String(pair.quoteToken?.address || ''));
   const baseUsd = Number(pair.priceUsd || 0);
 
   if (!Number.isFinite(baseUsd) || baseUsd <= 0) return null;
@@ -146,53 +149,60 @@ function priceForRequestedToken(pair: DexPair, requestedAddress: string) {
   if (quote === requested) {
     const baseInQuote = Number(pair.priceNative || 0);
     if (Number.isFinite(baseInQuote) && baseInQuote > 0) {
-      return String(baseUsd / baseInQuote);
+      const quoteUsd = baseUsd / baseInQuote;
+      return Number.isFinite(quoteUsd) && quoteUsd > 0 ? String(quoteUsd) : null;
     }
   }
 
   return null;
 }
 
-function selectBestPair(pairs: DexPair[], chainSlug: string, requestedAddress: string) {
+export function selectDexScreenerPair(pairs: DexPair[], chainId: number, requestedAddress: string) {
+  const chainSlug = getChainMeta(chainId).dexScreenerChain;
   const sameChain = pairs.filter(
-    (pair) => String(pair.chainId || '').toLowerCase() === chainSlug.toLowerCase()
+    (pair) => String(pair.chainId || '').toLowerCase() === chainSlug.toLowerCase() && pairLiquidity(pair) > 0
   );
 
   const priced = sameChain
-    .map((pair) => ({ pair, priceUSD: priceForRequestedToken(pair, requestedAddress) }))
+    .map((pair) => ({ pair, priceUSD: priceForRequestedToken(pair, chainId, requestedAddress) }))
     .filter((item): item is { pair: DexPair; priceUSD: string } => Boolean(item.priceUSD));
 
-  const baseMatches = priced.filter(
-    (item) => String(item.pair.baseToken?.address || '').toLowerCase() === requestedAddress.toLowerCase()
-  );
-  const candidates = baseMatches.length ? baseMatches : priced;
-  candidates.sort((a, b) => pairLiquidity(b.pair) - pairLiquidity(a.pair));
-  return candidates[0] || null;
+  // Pair orientation is not a quality signal. Deep quote-side pools must not
+  // lose to tiny base-side pools; quote prices are converted above.
+  priced.sort((a, b) => pairLiquidity(b.pair) - pairLiquidity(a.pair));
+  return priced[0] || null;
 }
 
 async function fetchDexPairs(chainSlug: string, addresses: string[]) {
   if (!addresses.length) return [] as DexPair[];
-
-  const base = process.env.DEXSCREENER_BASE_URL || 'https://api.dexscreener.com';
-  const batchUrl = `${base.replace(/\/$/, '')}/tokens/v1/${encodeURIComponent(
-    chainSlug
-  )}/${addresses.map(encodeURIComponent).join(',')}`;
-
-  const batchRes = await fetch(batchUrl, { cache: 'no-store' });
-  if (batchRes.ok) {
-    const json = await batchRes.json().catch(() => null);
-    return Array.isArray(json) ? (json as DexPair[]) : [];
-  }
-
-  const perToken = await Promise.all(
-    addresses.map(async (address) => {
-      const url = `${base.replace(/\/$/, '')}/latest/dex/tokens/${encodeURIComponent(address)}`;
-      const res = await fetch(url, { cache: 'no-store' });
-      if (!res.ok) return [] as DexPair[];
-      const json = await res.json().catch(() => null);
-      return Array.isArray(json?.pairs) ? (json.pairs as DexPair[]) : [];
-    })
-  );
+  const base = (process.env.DEXSCREENER_BASE_URL || 'https://api.dexscreener.com').replace(/\/+$/, '');
+  const perToken = await Promise.all(addresses.map(async (address) => {
+    const key = `${chainSlug}:${address}`;
+    const existing = pendingPools.get(key);
+    if (existing) return existing;
+    const request = (async () => {
+      // The batch token endpoint can return just one unrepresentative pool.
+      // Request the pool list so liquidity ranking can compare real candidates.
+      const urls = [
+        `${base}/token-pairs/v1/${encodeURIComponent(chainSlug)}/${encodeURIComponent(address)}`,
+        `${base}/latest/dex/tokens/${encodeURIComponent(address)}`,
+      ];
+      for (const url of urls) {
+        try {
+          const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS) });
+          if (!res.ok) continue;
+          const json = await res.json();
+          const pairs = Array.isArray(json) ? json : json?.pairs;
+          if (Array.isArray(pairs)) return pairs.filter((pair) => pair && typeof pair === 'object') as DexPair[];
+        } catch {
+          // Try the alternate pool-list endpoint without blocking other tokens.
+        }
+      }
+      return [] as DexPair[];
+    })();
+    pendingPools.set(key, request);
+    try { return await request; } finally { pendingPools.delete(key); }
+  }));
   return perToken.flat();
 }
 
@@ -237,11 +247,20 @@ export async function getTokenPrices(
   }
 
   const missesByChain = new Map<number, Array<{ chainId: number; address: TokenAddress; lookup: TokenAddress }>>();
-  for (const miss of misses) {
+  await Promise.all(misses.map(async (miss) => {
+    const priceUSD = await getLifiTokenPrice(miss.chainId, miss.address);
+    if (priceUSD) {
+      const price: TokenPrice = { chainId: miss.chainId, address: miss.address, priceUSD, source: 'lifi', cached: false };
+      const key = cacheKey(miss.chainId, miss.address);
+      await upsertDbPrice(price);
+      cacheSet(key, price, PRICE_TTL_MS);
+      output.set(key, price);
+      return;
+    }
     const list = missesByChain.get(miss.chainId) || [];
     list.push(miss);
     missesByChain.set(miss.chainId, list);
-  }
+  }));
 
   await Promise.all(
     Array.from(missesByChain.entries()).map(async ([chainId, chainMisses]) => {
@@ -252,7 +271,7 @@ export async function getTokenPrices(
       );
 
       for (const miss of chainMisses) {
-        const selected = selectBestPair(pairs, meta.dexScreenerChain, miss.lookup);
+        const selected = selectDexScreenerPair(pairs, chainId, miss.lookup);
         const key = cacheKey(miss.chainId, miss.address);
 
         const price: TokenPrice = selected
