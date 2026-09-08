@@ -2,7 +2,7 @@ import { getAddress, isAddress } from 'viem';
 
 import { getChainMeta } from '@/lib/chainsMeta';
 import { addressCacheKey, normalizeSolanaAddress, normalizeTokenAddressForChain } from '@/lib/addresses';
-import { findLifiToken } from '@/lib/server/lifiTokens';
+import { findLifiToken, findOneInchToken, readRpcToken } from '@/lib/server/tokenMetadataProviders';
 import type { Address, Token } from '@/lib/types';
 import { cacheGet, cacheSet } from '@/lib/server/cache';
 import { getCacheSql, isDatabaseConfigured } from '@/lib/server/db';
@@ -10,6 +10,8 @@ import { getCacheSql, isDatabaseConfigured } from '@/lib/server/db';
 const ZERO: Address = '0x0000000000000000000000000000000000000000';
 const METADATA_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MEMORY_TTL_MS = 60 * 60 * 1000;
+const pendingMetadata = new Map<string, Promise<TokenMetadataResult>>();
+type MetadataProvider = 'lifi' | 'oneinch' | 'rpc';
 
 type CachedMetadataRow = {
   chain_id: number;
@@ -23,19 +25,9 @@ type CachedMetadataRow = {
   fetched_at: string;
 };
 
-type MoralisMetadata = {
-  address?: string;
-  name?: string;
-  symbol?: string;
-  decimals?: string | number;
-  logo?: string | null;
-  thumbnail?: string | null;
-  possible_spam?: boolean;
-};
-
 export type TokenMetadataResult = {
   token: Token;
-  source: 'local-native' | 'neon' | 'neon-stale' | 'memory' | 'moralis' | 'lifi';
+  source: 'local-native' | 'neon' | 'neon-stale' | 'memory' | MetadataProvider;
   dbCache: 'enabled' | 'disabled' | 'error';
 };
 
@@ -70,7 +62,7 @@ function tokenFromRow(row: CachedMetadataRow): Token {
     address,
     name: row.name,
     symbol: row.symbol,
-    decimals: Number(row.decimals || 18),
+    decimals: Number(row.decimals ?? 18),
     logoURI: row.logo_uri || row.thumbnail_uri || undefined,
   };
 }
@@ -107,9 +99,7 @@ async function getDbToken(chainId: number, address: string) {
 
 async function upsertDbToken(
   token: Token,
-  source: 'moralis' | 'lifi',
-  thumbnailUri?: string | null,
-  possibleSpam?: boolean | null,
+  source: MetadataProvider,
 ) {
   if (!isDatabaseConfigured()) return 'disabled' as const;
 
@@ -132,8 +122,8 @@ async function upsertDbToken(
         ${token.symbol},
         ${token.decimals},
         ${token.logoURI || null},
-        ${thumbnailUri || null},
-        ${possibleSpam ?? null},
+        ${null},
+        ${null},
         ${source},
         now(),
         now()
@@ -143,9 +133,7 @@ async function upsertDbToken(
         name = EXCLUDED.name,
         symbol = EXCLUDED.symbol,
         decimals = EXCLUDED.decimals,
-        logo_uri = EXCLUDED.logo_uri,
-        thumbnail_uri = EXCLUDED.thumbnail_uri,
-        possible_spam = EXCLUDED.possible_spam,
+        logo_uri = COALESCE(EXCLUDED.logo_uri, token_metadata.logo_uri),
         source = EXCLUDED.source,
         fetched_at = now(),
         updated_at = now()
@@ -154,68 +142,6 @@ async function upsertDbToken(
   } catch {
     return 'error' as const;
   }
-}
-
-async function moralisFetch(url: string, init: RequestInit = {}) {
-  const key = process.env.MORALIS_API_KEY;
-  if (!key) throw new Error('Missing MORALIS_API_KEY');
-  const res = await fetch(url, {
-    ...init,
-    headers: {
-      accept: 'application/json',
-      'X-API-Key': key,
-      ...(init.headers || {}),
-    },
-    cache: 'no-store',
-  });
-  if (!res.ok) {
-    const txt = await res.text().catch(() => '');
-    throw new Error(`Moralis error ${res.status}: ${txt}`);
-  }
-  return res.json();
-}
-
-async function fetchMoralisMetadata(chainId: number, address: string): Promise<{
-  token: Token;
-  thumbnailUri?: string | null;
-  possibleSpam?: boolean | null;
-}> {
-  const meta = getChainMeta(chainId);
-  if (!meta.moralisChain) throw new Error('Moralis metadata is not configured for this chain.');
-  const base = process.env.MORALIS_BASE_URL || 'https://deep-index.moralis.io/api/v2.2';
-  const url = `${base.replace(/\/$/, '')}/erc20/metadata?chain=${encodeURIComponent(
-    meta.moralisChain
-  )}&addresses%5B0%5D=${encodeURIComponent(address)}`;
-  const data: MoralisMetadata[] = await moralisFetch(url);
-  const item = data?.[0];
-
-  if (!item?.address) {
-    throw new Error('Token metadata was not found on Moralis.');
-  }
-
-  const checksum = toChecksumAddress(item.address) || toChecksumAddress(address);
-  if (!checksum) throw new Error('Moralis returned an invalid token address.');
-
-  const decimals = Number(item.decimals ?? 18);
-  const symbol = String(item.symbol || '').trim();
-  const name = String(item.name || '').trim();
-
-  if (!symbol || !name || !Number.isFinite(decimals)) {
-    throw new Error('Moralis returned incomplete token metadata.');
-  }
-
-  return {
-    token: {
-      chainId,
-      address: checksum,
-      name,
-      symbol: symbol.slice(0, 32),
-      decimals,
-      logoURI: item.logo || item.thumbnail || undefined,
-    },
-    thumbnailUri: item.thumbnail ?? null,
-    possibleSpam: item.possible_spam ?? null,
-  };
 }
 
 export async function getTokenMetadata(chainId: number, addressInput: string): Promise<TokenMetadataResult> {
@@ -242,6 +168,25 @@ export async function getTokenMetadata(chainId: number, addressInput: string): P
     };
   }
 
+  const pending = pendingMetadata.get(memoryKey);
+  if (pending) return pending;
+  const request = resolveMetadata(chainId, normalized, normalizedKey, memoryKey);
+  pendingMetadata.set(memoryKey, request);
+  try {
+    return await request;
+  } finally {
+    pendingMetadata.delete(memoryKey);
+  }
+}
+
+async function resolveMetadata(
+  chainId: number,
+  normalized: string,
+  normalizedKey: string,
+  memoryKey: string,
+): Promise<TokenMetadataResult> {
+  const meta = getChainMeta(chainId);
+
   const dbHit = await getDbToken(chainId, normalizedKey);
   const row = dbHit.row;
   const rowAge = row ? Date.now() - new Date(row.fetched_at).getTime() : Number.POSITIVE_INFINITY;
@@ -251,34 +196,32 @@ export async function getTokenMetadata(chainId: number, addressInput: string): P
     return { token, source: 'neon', dbCache: dbHit.dbCache };
   }
 
-  if (meta.chainType !== 'EVM') {
+  const providers: Array<[MetadataProvider, typeof findLifiToken]> = [['lifi', findLifiToken]];
+  if (meta.chainType === 'EVM') {
+    providers.push(['oneinch', findOneInchToken], ['rpc', readRpcToken]);
+  }
+
+  for (const [source, resolve] of providers) {
     try {
-      const lifiToken = await findLifiToken(chainId, normalized);
-      if (!lifiToken) throw new Error('Token metadata was not found on LI.FI.');
-      const dbCache = await upsertDbToken(lifiToken, 'lifi');
-      cacheSet(memoryKey, lifiToken, MEMORY_TTL_MS);
-      return { token: lifiToken, source: 'lifi', dbCache };
-    } catch (e) {
-      if (row) {
-        const token = tokenFromRow(row);
-        cacheSet(memoryKey, token, 15 * 60 * 1000);
-        return { token, source: 'neon-stale', dbCache: dbHit.dbCache };
-      }
-      throw e;
+      const resolved = await resolve(chainId, normalized);
+      if (!resolved) continue;
+      const token = {
+        ...resolved,
+        // RPC cannot supply a logo; retain any previously cached artwork.
+        logoURI: resolved.logoURI || row?.logo_uri || row?.thumbnail_uri || undefined,
+      };
+      const dbCache = await upsertDbToken(token, source);
+      cacheSet(memoryKey, token, MEMORY_TTL_MS);
+      return { token, source, dbCache };
+    } catch {
+      // Provider failures must not prevent trying the next source.
     }
   }
 
-  try {
-    const moralis = await fetchMoralisMetadata(chainId, normalizedKey);
-    const dbCache = await upsertDbToken(moralis.token, 'moralis', moralis.thumbnailUri, moralis.possibleSpam);
-    cacheSet(memoryKey, moralis.token, MEMORY_TTL_MS);
-    return { token: moralis.token, source: 'moralis', dbCache };
-  } catch (e) {
-    if (row) {
-      const token = tokenFromRow(row);
-      cacheSet(memoryKey, token, 15 * 60 * 1000);
-      return { token, source: 'neon-stale', dbCache: dbHit.dbCache };
-    }
-    throw e;
+  if (row) {
+    const token = tokenFromRow(row);
+    cacheSet(memoryKey, token, 15 * 60 * 1000);
+    return { token, source: 'neon-stale', dbCache: dbHit.dbCache };
   }
+  throw new Error('Token information is unavailable on this network. Check the token address or try again later.');
 }

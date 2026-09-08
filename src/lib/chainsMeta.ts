@@ -2,7 +2,6 @@ export type ChainMeta = {
   id: number;
   name: string;
   chainType: 'EVM' | 'SVM';
-  moralisChain?: string; // hex chain id for Moralis (0x...)
   dexScreenerChain: string; // DexScreener chain slug
   wrappedNativeAddress: string; // used for DexScreener native-token pricing
   nativeTokenAddress: string; // canonical router/API address for the native token
@@ -19,7 +18,6 @@ export const CHAIN_META: Record<number, ChainMeta> = {
     id: 1,
     name: 'Ethereum',
     chainType: 'EVM',
-    moralisChain: '0x1',
     dexScreenerChain: 'ethereum',
     wrappedNativeAddress: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
     nativeTokenAddress: '0x0000000000000000000000000000000000000000',
@@ -32,7 +30,6 @@ export const CHAIN_META: Record<number, ChainMeta> = {
     id: 137,
     name: 'Polygon',
     chainType: 'EVM',
-    moralisChain: '0x89',
     dexScreenerChain: 'polygon',
     wrappedNativeAddress: '0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270',
     nativeTokenAddress: '0x0000000000000000000000000000000000000000',
@@ -45,7 +42,6 @@ export const CHAIN_META: Record<number, ChainMeta> = {
     id: 42161,
     name: 'Arbitrum',
     chainType: 'EVM',
-    moralisChain: '0xa4b1',
     dexScreenerChain: 'arbitrum',
     wrappedNativeAddress: '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1',
     nativeTokenAddress: '0x0000000000000000000000000000000000000000',
@@ -58,7 +54,6 @@ export const CHAIN_META: Record<number, ChainMeta> = {
     id: 10,
     name: 'Optimism',
     chainType: 'EVM',
-    moralisChain: '0xa',
     dexScreenerChain: 'optimism',
     wrappedNativeAddress: '0x4200000000000000000000000000000000000006',
     nativeTokenAddress: '0x0000000000000000000000000000000000000000',
@@ -71,7 +66,6 @@ export const CHAIN_META: Record<number, ChainMeta> = {
     id: 8453,
     name: 'Base',
     chainType: 'EVM',
-    moralisChain: '0x2105',
     dexScreenerChain: 'base',
     wrappedNativeAddress: '0x4200000000000000000000000000000000000006',
     nativeTokenAddress: '0x0000000000000000000000000000000000000000',
@@ -84,7 +78,6 @@ export const CHAIN_META: Record<number, ChainMeta> = {
     id: 56,
     name: 'BSC',
     chainType: 'EVM',
-    moralisChain: '0x38',
     dexScreenerChain: 'bsc',
     wrappedNativeAddress: '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c',
     nativeTokenAddress: '0x0000000000000000000000000000000000000000',
@@ -97,7 +90,6 @@ export const CHAIN_META: Record<number, ChainMeta> = {
     id: 43114,
     name: 'Avalanche',
     chainType: 'EVM',
-    moralisChain: '0xa86a',
     dexScreenerChain: 'avalanche',
     wrappedNativeAddress: '0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7',
     nativeTokenAddress: '0x0000000000000000000000000000000000000000',

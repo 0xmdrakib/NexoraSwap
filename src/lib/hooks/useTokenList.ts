@@ -124,7 +124,7 @@ export function useTokenList(chainId?: number) {
     const addr = normalizeTokenAddressForChain(chainId, address);
     if (!addr) throw new Error('Invalid token address');
 
-    // Fetch metadata (Moralis → on-chain fallback) from the server route.
+    // The server resolves cached metadata, then LI.FI, 1inch and RPC as needed.
     const res = await fetch(`/api/token-metadata?chainId=${chainId}&address=${addr}`, { cache: 'no-store' });
     const txt = await res.text();
     let json: any = null;

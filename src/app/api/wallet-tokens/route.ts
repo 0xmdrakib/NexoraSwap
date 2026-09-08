@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
             symbol: token.symbol,
             decimals: token.decimals,
             balance: account.balance.toString(),
-            balanceFormatted: formatTokenAmount(account.balance.toString(), token.decimals || account.decimals || 0, 6),
+            balanceFormatted: formatTokenAmount(account.balance.toString(), token.decimals ?? account.decimals ?? 0, 6),
             logo: token.logoURI || null,
             thumbnail: null,
           } satisfies WalletToken;
@@ -115,7 +115,7 @@ export async function GET(req: NextRequest) {
           symbol: token.symbol,
           decimals: token.decimals,
           balance: balance.tokenBalance,
-          balanceFormatted: formatTokenAmount(balance.tokenBalance || '0', token.decimals || 18, 6),
+          balanceFormatted: formatTokenAmount(balance.tokenBalance || '0', token.decimals ?? 18, 6),
           logo: token.logoURI || null,
           thumbnail: null,
         } satisfies WalletToken;

@@ -258,7 +258,7 @@ export default function TokenSelect({
 						logoURI: wt.logo || wt.thumbnail || undefined,
 						balanceRaw: wt.balance,
 						balanceFormatted:
-							wt.balanceFormatted || formatTokenAmount(wt.balance || '0', wt.decimals || 18, 6),
+							wt.balanceFormatted || formatTokenAmount(wt.balance || '0', wt.decimals ?? 18, 6),
 					}) satisfies Token,
 				];
 			});
@@ -343,14 +343,14 @@ export default function TokenSelect({
     const exactRaw = exactBalances[balanceKey(t.chainId || chainId, t.address)];
     if (exactRaw !== undefined) {
       try {
-        if (BigInt(exactRaw || '0') > 0n) return formatTokenAmount(exactRaw, t.decimals || 18);
+        if (BigInt(exactRaw || '0') > 0n) return formatTokenAmount(exactRaw, t.decimals ?? 18);
       } catch {
         // Fall back to wallet scan data below.
       }
     }
     const wt = walletByAddr.get(tokenKey(t.chainId || chainId, t.address));
     if (!wt) return '-';
-    return formatTokenAmount(wt.balance || '0', wt.decimals || 18);
+    return formatTokenAmount(wt.balance || '0', wt.decimals ?? 18);
   }
 
   async function resolveSelectedToken(t: Token): Promise<Token> {
@@ -365,7 +365,7 @@ export default function TokenSelect({
       return { ...(json.token as Token), priceUSD: undefined, balanceRaw: t.balanceRaw, balanceFormatted: t.balanceFormatted };
     }
 
-    throw new Error(json?.error || 'Token metadata could not be loaded from Moralis.');
+    throw new Error(json?.error || 'Token information could not be loaded. Please try again.');
   }
 
   async function pickToken(t: Token) {
@@ -375,7 +375,7 @@ export default function TokenSelect({
       onTokenSelected(selected);
       setOpen(false);
     } catch (e: any) {
-      setCustomError(e?.message || 'Token metadata could not be loaded from Moralis.');
+      setCustomError(e?.message || 'Token information could not be loaded. Please try again.');
     }
   }
 

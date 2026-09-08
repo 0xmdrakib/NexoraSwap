@@ -57,6 +57,20 @@ The app focuses on keeping swap execution more transparent by showing route sele
 - **gas.zip** is available as a selectable cross-chain route option.
 - The UI surfaces estimated bridge fee information and the native token value the wallet will send for the transaction.
 
+## Token information
+
+Token selection, custom imports, shared swap links and wallet token lists use the same server metadata resolver:
+
+1. Native tokens use local chain information. Other tokens first use the existing memory/Neon cache.
+2. LI.FI is the primary source, with an address lookup when a token is absent from its token list.
+3. On EVM networks, the 1inch Classic Swap token list is the second source, using the existing 1inch key and base URL.
+4. For EVM tokens missing from both sources, the configured Alchemy RPC reads the contract's name, symbol and decimals. The RPC chain is checked before accepting the result.
+5. If providers are unavailable, existing stale database metadata can still be used. Unknown tokens return an actionable error without guessing decimals.
+
+Solana continues to use LI.FI and its existing RPC balance service. Token logos are optional; cached artwork is retained when a provider cannot supply it. Existing cache records do not need to be deleted or recreated. Token prices continue to come from DexScreener, and swap routing is unchanged.
+
+Run `npm test` for metadata and fallback regression coverage, then `npm run build` for the production build.
+
 ## Tech stack
 
 - Next.js 14

@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
       {
         error:
           e?.message ||
-          'Token metadata could not be loaded from Moralis. Check chain + contract address.',
+          'Token information could not be loaded. Check the network and token address.',
       },
       { status: e?.message === 'Invalid address' ? 400 : 404 }
     );

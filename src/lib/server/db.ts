@@ -33,7 +33,7 @@ async function createSchema(sql: SqlClient) {
       logo_uri text,
       thumbnail_uri text,
       possible_spam boolean,
-      source text NOT NULL DEFAULT 'moralis',
+      source text NOT NULL DEFAULT 'unknown',
       fetched_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now(),
       PRIMARY KEY (chain_id, address)
