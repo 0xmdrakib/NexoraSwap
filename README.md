@@ -69,17 +69,11 @@ Token selection, custom imports, shared swap links and wallet token lists use th
 
 Solana continues to use LI.FI and its existing RPC balance service. Token logos are optional; cached artwork is retained when a provider cannot supply it. Existing cache records do not need to be deleted or recreated. Swap routing is unchanged.
 
-Run `npm test` for metadata and fallback regression coverage, then `npm run build` for the production build.
-
-The cache uses PostgreSQL `bigint` chain IDs so Solana fits alongside EVM networks. On first use, older integer columns are widened in place while retaining existing records and keys. To include the real PostgreSQL migration test, set `NEXORA_TEST_POSTGRES_CONTAINER` to a disposable PostgreSQL container name before running `npm test`.
-
 ## USD price estimates
 
 The single-token, batch and native-token price endpoints share a resolver: fresh cache, then LI.FI, then DexScreener when LI.FI has no valid price or is unavailable. LI.FI results must match the requested chain and address. Stablecoin prices are never forced to $1.
 
 DexScreener fallback prices come from its broader token-pool list, with an alternate pool-list endpoint for availability. The batch token endpoint can expose an unrepresentative pool and is not used for price selection. Pools must match the chain and token, have positive reported liquidity and yield a finite positive USD price. The deepest eligible pool wins regardless of whether the token is the base or quote asset; quote-side prices are converted using the pool ratio. Solana address matching preserves case. These are market estimates, and a thin or distorted pool can still be unreliable; unavailable prices are returned as unknown.
-
-Run `npm run audit:prices` for a live comparison of LI.FI-listed USDT/USDT0, USDC, DAI, bridged `.e` variants and native tokens across supported networks. It writes JSON and Markdown reports under `output/verification` and flags unavailable prices or differences above 5% for review. This is a repeatable sample, not continuous monitoring or coverage of every custom token.
 
 ## Tech stack
 
